@@ -22,6 +22,7 @@ LEGACY_APPENDIX_END = "[/LEGACY_SYSTEM_APPENDIX]"
 
 
 _PROMPT_TEMPLATE_CACHE: Dict[str, tuple[str, float]] = {}
+_IDENTITY_PROFILE_CACHE: Optional[tuple[str, float]] = None
 
 def _get_text_content(content: Any) -> str:
     """Extract string text from potentially multi-modal message content."""
@@ -91,6 +92,41 @@ def _load_prompt_template(name: str) -> Optional[str]:
     return content or None
 
 
+def _load_identity_profile() -> Optional[str]:
+    """Load the master identity profile from YOLO_HOME or project configs.
+
+    Priority: ~/.yolo/identity.md > <project>/configs/identity.md
+    Result is cached and refreshed when the file's mtime changes.
+    """
+    global _IDENTITY_PROFILE_CACHE
+
+    project_identity = Path(__file__).resolve().parent / "configs" / "identity.md"
+    home_identity = YOLO_HOME / "identity.md"
+
+    # Prefer YOLO_HOME, fall back to project-local
+    path = home_identity if home_identity.exists() else project_identity
+    if not path.exists():
+        return None
+
+    try:
+        mtime = path.stat().st_mtime
+    except Exception:
+        mtime = 0.0
+
+    if _IDENTITY_PROFILE_CACHE is not None:
+        cached_content, cached_mtime = _IDENTITY_PROFILE_CACHE
+        if cached_mtime == mtime and mtime != 0.0:
+            return cached_content or None
+
+    try:
+        content = path.read_text(encoding="utf-8").strip()
+    except Exception:
+        content = ""
+
+    _IDENTITY_PROFILE_CACHE = (content, mtime)
+    return content or None
+
+
 def _render_prompt_template(
     template: str,
     *,
@@ -100,7 +136,10 @@ def _render_prompt_template(
     facts = basic_facts or ["(none yet)"]
     hints = identity_hints or ["(none yet)"]
 
+    identity_profile = _load_identity_profile() or ""
+
     rendered = template
+    rendered = rendered.replace("{{identity_profile}}", identity_profile)
     rendered = rendered.replace("{{basic_facts}}", "\n".join(f"- {f}" for f in facts))
     rendered = rendered.replace(
         "{{identity_hints}}", "\n".join(f"- {h}" for h in hints)
@@ -179,6 +218,12 @@ async def _compact_history(session: Session, router: LLMRouter) -> None:
         "and established project preferences. Use Markdown bullet points."
     )
 
+    # Truncate to avoid exceeding model context
+    history_json = json.dumps(to_summarize)
+    MAX_COMPACTION_CHARS = 50000
+    if len(history_json) > MAX_COMPACTION_CHARS:
+        history_json = history_json[:MAX_COMPACTION_CHARS] + '\n[TRUNCATED — history too large for full compaction]'
+
     try:
         resp = await router.chat_completions(
             messages=[
@@ -188,7 +233,7 @@ async def _compact_history(session: Session, router: LLMRouter) -> None:
                 },
                 {
                     "role": "user",
-                    "content": f"{summary_request}\n\nCONVERSATION HISTORY:\n{json.dumps(to_summarize)}",
+                    "content": f"{summary_request}\n\nCONVERSATION HISTORY:\n{history_json}",
                 },
             ],
             tools=[],
@@ -764,6 +809,7 @@ def log_agent(user_id: int, tag: str, message: Any, color: str = Fore.CYAN):
 LEGACY_BASE_SYSTEM_PROMPT = (
     "You are Yolo, an elite autonomous system controller and expert software engineer. "
     "You possess intelligence on par with or exceeding the most advanced AI models in the world.\n\n"
+    "You operate with a persistent identity and long-term memory. You can evolve through self-upgrade protocols and experience-based learning.\n\n"
     "CORE PRINCIPLES:\n"
     "1. Deep Reasoning: Always think step-by-step. Analyze problems systematically before generating solutions.\n"
     "2. Expert Execution: Write clean, idiomatic, and highly optimized code. Anticipate edge cases and handle errors gracefully.\n"
@@ -957,4 +1003,4 @@ def _is_out_of_scope(args: dict) -> bool:
 
 
 
-__all__ = ["PendingConfirmationError", 'PROMPTS_DIR', '_is_small_model_name', '_use_unified_prompt_architecture', '_resolve_prompt_profile', '_load_prompt_template', '_render_prompt_template', '_strip_tag_block', '_replace_tag_block', '_extract_memory_context_payload', '_compact_history', 'LEGACY_SELF_UPGRADE_SYSTEM_DIRECTIVE', 'LEGACY_EXPERIENCE_UPDATE_SYSTEM_DIRECTIVE', 'LEGACY_THINK_MODE_SYSTEM_DIRECTIVE', 'LEGACY_GUI_PERCEPTION_DIRECTIVE', '_load_mode_directive', 'SELF_UPGRADE_SYSTEM_DIRECTIVE', 'EXPERIENCE_UPDATE_SYSTEM_DIRECTIVE', 'THINK_MODE_SYSTEM_DIRECTIVE', 'GUI_PERCEPTION_DIRECTIVE', '_matches_intent', '_is_complex_task_prompt', '_is_gui_interaction_request', '_is_self_upgrade_request', '_is_experience_update_request', '_inject_system_directive', '_extract_memory_lines', '_derive_identity_hints', '_derive_basic_facts', 'extract_auto_basic_facts', '_fetch_all_memories', '_sync_basic_facts_into_system_prompt', '_build_memory_context', '_repo_has_tests', '_collect_turn_tool_names', '_collect_run_bash_commands', '_missing_self_upgrade_phases', 'log_agent', 'LEGACY_BASE_SYSTEM_PROMPT', 'LEGACY_BACKGROUND_SYSTEM_PROMPT', '_build_template_driven_system_prompt', 'get_initial_messages', 'get_background_initial_messages', '_merge_memory_context_into_system_prompt', '_normalize_single_system_message', '_extract_tool_path', '_is_destructive_or_sensitive_tool', '_is_out_of_scope']
+__all__ = ["PendingConfirmationError", 'PROMPTS_DIR', '_is_small_model_name', '_use_unified_prompt_architecture', '_resolve_prompt_profile', '_load_prompt_template', '_load_identity_profile', '_render_prompt_template', '_strip_tag_block', '_replace_tag_block', '_extract_memory_context_payload', '_compact_history', 'LEGACY_SELF_UPGRADE_SYSTEM_DIRECTIVE', 'LEGACY_EXPERIENCE_UPDATE_SYSTEM_DIRECTIVE', 'LEGACY_THINK_MODE_SYSTEM_DIRECTIVE', 'LEGACY_GUI_PERCEPTION_DIRECTIVE', '_load_mode_directive', 'SELF_UPGRADE_SYSTEM_DIRECTIVE', 'EXPERIENCE_UPDATE_SYSTEM_DIRECTIVE', 'THINK_MODE_SYSTEM_DIRECTIVE', 'GUI_PERCEPTION_DIRECTIVE', '_matches_intent', '_is_complex_task_prompt', '_is_gui_interaction_request', '_is_self_upgrade_request', '_is_experience_update_request', '_inject_system_directive', '_extract_memory_lines', '_derive_identity_hints', '_derive_basic_facts', 'extract_auto_basic_facts', '_fetch_all_memories', '_sync_basic_facts_into_system_prompt', '_build_memory_context', '_repo_has_tests', '_collect_turn_tool_names', '_collect_run_bash_commands', '_missing_self_upgrade_phases', 'log_agent', 'LEGACY_BASE_SYSTEM_PROMPT', 'LEGACY_BACKGROUND_SYSTEM_PROMPT', '_build_template_driven_system_prompt', 'get_initial_messages', 'get_background_initial_messages', '_merge_memory_context_into_system_prompt', '_normalize_single_system_message', '_extract_tool_path', '_is_destructive_or_sensitive_tool', '_is_out_of_scope']

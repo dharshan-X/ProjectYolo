@@ -33,12 +33,11 @@ async def run_worker_loop(user_id: int, task_id: str, role: str, objective: str,
     # Bug 6 fix: Only catch IntegrityError, not all exceptions
     try:
         add_worker_task(task_id, user_id, role, objective)
-    except (sqlite3.IntegrityError, Exception) as e:
-        if "UNIQUE constraint" in str(e) or "IntegrityError" in type(e).__name__:
-            pass  # Already added by spawn_worker, expected
-        else:
-            logger.error(f"[{task_id}] Failed to create DB record: {e}")
-            return  # Can't run without a DB record
+    except sqlite3.IntegrityError:
+        pass  # Already added by spawn_worker, expected
+    except Exception as e:
+        logger.error(f"[{task_id}] Failed to create DB record: {e}")
+        return  # Can't run without a DB record
 
     worker_session = Session(user_id=user_id)
     # Default worker to YOLO mode as it runs autonomously

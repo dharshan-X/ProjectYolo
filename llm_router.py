@@ -14,32 +14,32 @@ except Exception:
 import time
 import asyncio
 import random
+import threading
 
 class RateLimiter:
     def __init__(self, rpm_limit: int):
         self.rpm_limit = rpm_limit
         self.period = 60.0
         self.calls: list[float] = []
-        self._lock = asyncio.Lock()
+        self._lock = threading.Lock()
 
     async def wait(self):
         if self.rpm_limit <= 0:
             return
-        
-        async with self._lock:
-            now = time.time()
-            self.calls = [t for t in self.calls if now - t < self.period]
-            if len(self.calls) >= self.rpm_limit:
+
+        while True:
+            with self._lock:
+                now = time.time()
+                self.calls = [t for t in self.calls if now - t < self.period]
+                if len(self.calls) < self.rpm_limit:
+                    self.calls.append(now)
+                    return
                 sleep_time = self.period - (now - self.calls[0])
-                if sleep_time > 0:
-                    import sys
-                    sys.stdout.write(f"\n[Rate Limit] Reached limit of {self.rpm_limit} requests/min. Pausing for {sleep_time:.1f}s to prevent exhaustion...\n")
-                    sys.stdout.flush()
-                    await asyncio.sleep(sleep_time)
-                self.calls = [t for t in self.calls if time.time() - t < self.period]
-                self.calls.append(time.time())
-            else:
-                self.calls.append(now)
+            # Sleep OUTSIDE the lock
+            import sys
+            sys.stdout.write(f"\n[Rate Limit] Reached limit of {self.rpm_limit} requests/min. Pausing for {sleep_time:.1f}s to prevent exhaustion...\n")
+            sys.stdout.flush()
+            await asyncio.sleep(sleep_time)
 _GLOBAL_RATE_LIMITER: Optional[RateLimiter] = None
 
 def _get_rate_limiter() -> RateLimiter:
@@ -76,6 +76,13 @@ class LLMConfig:
         # Common audio-capable models (native, not just whisper)
         audio_keywords = ["gpt-4o", "gemini-1.5", "audio"]
         return any(k in m for k in audio_keywords)
+
+    def supports_documents(self) -> bool:
+        """Check if the configured model natively supports document (PDF) input."""
+        m = self.model.lower()
+        # Models known to support native PDF/doc parts (Claude 3.5, Gemini 1.5)
+        doc_keywords = ["claude-3-5", "gemini-1.5", "gemini-3"]
+        return any(k in m for k in doc_keywords)
 
 
 def _default_model(provider: str) -> str:

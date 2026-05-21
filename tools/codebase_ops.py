@@ -48,7 +48,20 @@ MAX_FILE_SIZE = 500 * 1024  # 500 KB limit for text files
 
 def _get_qdrant_client() -> QdrantClient:
     RAG_DB_PATH.mkdir(parents=True, exist_ok=True)
-    client = QdrantClient(path=str(RAG_DB_PATH))
+    
+    # Bug fix: Handle local lock contention with a simple retry
+    import time
+    max_retries = 5
+    for i in range(max_retries):
+        try:
+            client = QdrantClient(path=str(RAG_DB_PATH))
+            break
+        except Exception as e:
+            if "already accessed by another instance" in str(e) and i < max_retries - 1:
+                time.sleep(1 + i)
+                continue
+            raise
+
     embed_dim = int(os.getenv("EMBEDDING_DIMENSIONS", "1536"))
 
     # Check if collection exists
@@ -64,10 +77,14 @@ def _get_qdrant_client() -> QdrantClient:
 
 
 def _get_openai_client() -> OpenAI:
-    api_key = os.getenv("OPENAI_API_KEY")
-    base_url = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+    from llm_router import load_llm_config
+    llm_cfg = load_llm_config()
+
+    api_key = os.getenv("OPENAI_API_KEY") or llm_cfg.api_key
+    base_url = os.getenv("OPENAI_BASE_URL") or (llm_cfg.base_url if llm_cfg.provider in ["openai", "compatible", "openrouter"] else "https://api.openai.com/v1")
+
     if not api_key:
-        raise ValueError("OPENAI_API_KEY must be set for Codebase RAG embeddings.")
+        raise ValueError("OPENAI_API_KEY or LLM_API_KEY must be set for Codebase RAG embeddings.")
     return OpenAI(api_key=api_key, base_url=base_url)
 
 

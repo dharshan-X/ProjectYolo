@@ -4,8 +4,8 @@ __pycache__/
 .junie
 artifacts
 browser_profile
-configs
-
+reference_prompts
+reference_prompts/*
 *.py[codz]
 *$py.class
 test_agents

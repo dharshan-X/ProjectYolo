@@ -1,4 +1,5 @@
 import json
+import re as _re
 import sqlite3
 import threading
 
@@ -10,7 +11,7 @@ _CONNECTION_TIMEOUT_SECONDS = 10
 # Persistent shared connection (WAL mode allows safe concurrent reads/writes).
 # A single connection avoids repeated open/close overhead on hot paths
 # (notification worker every 10s, cron every 60s, every save_session call).
-_conn_lock = threading.Lock()
+_conn_lock = threading.RLock()
 _shared_conn: sqlite3.Connection | None = None
 
 
@@ -59,6 +60,10 @@ def _conn_ctx() -> _ConnContext:
 def _ensure_column_exists(
     conn: sqlite3.Connection, table_name: str, column_name: str, column_definition: str
 ) -> None:
+    # Validate identifiers to prevent SQL injection
+    _IDENT_RE = _re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]*$')
+    if not _IDENT_RE.match(table_name) or not _IDENT_RE.match(column_name):
+        raise ValueError(f"Invalid identifier: {table_name}.{column_name}")
     existing_columns = {
         row[1] for row in conn.execute(f"PRAGMA table_info({table_name})")
     }

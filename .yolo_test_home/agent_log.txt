@@ -1,0 +1,10 @@
+{"timestamp": "2026-05-21T14:37:43.843642", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "hello"}
+{"timestamp": "2026-05-21T14:37:43.843980", "tool": "agent", "args": {"user_id": 1}, "status": "THINKING", "detail": "Consulting LLM..."}
+{"timestamp": "2026-05-21T14:37:44.900216", "tool": "mcp_manager", "args": {"server": "Leetcode"}, "status": "success", "detail": "Connected and loaded tools"}
+{"timestamp": "2026-05-21T14:37:59.922698", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "hello"}
+{"timestamp": "2026-05-21T14:37:59.922993", "tool": "agent", "args": {"user_id": 1}, "status": "THINKING", "detail": "Consulting LLM..."}
+{"timestamp": "2026-05-21T14:37:59.965997", "tool": "schedule_task", "args": {"task": "Backup database", "interval": 60}, "status": "success", "detail": ""}
+{"timestamp": "2026-05-21T14:37:59.966348", "tool": "schedule_daily_task", "args": {"task": "Daily report", "interval": 1440}, "status": "success", "detail": ""}
+{"timestamp": "2026-05-21T14:37:59.966871", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}
+{"timestamp": "2026-05-21T14:37:59.967131", "tool": "cancel_scheduled_task", "args": {"id": 1}, "status": "success", "detail": ""}
+{"timestamp": "2026-05-21T14:37:59.967394", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}

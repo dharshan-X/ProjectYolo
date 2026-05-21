@@ -6,6 +6,9 @@ from tools.registry import register_tool
 from tools.database_ops import update_worker_status, add_worker_task, _conn_ctx
 from tools.base import audit_log
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 @register_tool()
 def report_completion(task_id: str, summary: str) -> str:
@@ -200,9 +203,6 @@ def cancel_all_workers(user_id: int) -> str:
     return f"Cancelled {len(worker_ids)} worker(s) in DB, {cancelled_count} running coroutine(s) stopped."
 
 
-# Import logger at module level
-import logging
-logger = logging.getLogger(__name__)
 
 
 @register_tool()

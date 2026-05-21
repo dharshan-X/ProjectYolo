@@ -1,11 +1,11 @@
 {
   "name": "yolo-desktop",
   "version": "1.0.0",
-  "description": "Yolo AI Agent — Desktop Chat Interface",
+  "description": "Yolo — Desktop Chat Interface",
   "main": "main.js",
   "scripts": {
-    "start": "electron .",
-    "dev": "electron . --dev",
+    "start": "electron32 .",
+    "dev": "electron32 . --dev",
     "bridge": "python3 api_bridge.py"
   },
   "author": "Project Yolo",
@@ -14,5 +14,9 @@
     "highlight.js": "^11.11.1",
     "marked": "^18.0.2",
     "motion": "^12.38.0"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^4.0.4",
+    "electron": "^32.3.3"
   }
 }

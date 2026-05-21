@@ -3,6 +3,7 @@ from textual.containers import Horizontal, Vertical, Grid
 from textual.widgets import Header, Footer, Static, Button, Label
 from textual.screen import ModalScreen
 from tui_widgets import ChatWidget, UserInput, WorkWidget, LogWidget
+import asyncio
 import agent
 from session import SessionManager
 import json
@@ -149,7 +150,8 @@ class AgenticIDE(App):
                 if is_main_thread:
                     await chat_widget.update_live_message(content)
                 else:
-                    self.call_from_thread(chat_widget.update_live_message, content)
+                    # BUG-29 fix: update_live_message is async, wrap with ensure_future
+                    self.call_from_thread(lambda c=content: asyncio.ensure_future(chat_widget.update_live_message(c)))
             elif msg.startswith(agent.TUIMessage.TOOL_CALL + ":"):
                 data = json.loads(msg[len(agent.TUIMessage.TOOL_CALL) + 1:])
                 chat_msg = format_tool_call_for_chat(data["name"], data["args"])

@@ -26,10 +26,15 @@
   <link rel="stylesheet" href="vendor/katex.min.css" />
   <script src="vendor/katex.min.js"></script>
 
+  <!-- Inline Widgets Dependencies (CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
   <!-- Motion library for animations (local) -->
   <script src="vendor/motion.js"></script>
 
   <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.a11y.css" />
   <script>
     try {
       const saved = localStorage.getItem('yolo-desktop-prefs');
@@ -47,7 +52,7 @@
     <aside id="sidebar">
       <div class="sidebar-header">
         <img src="assets/history.svg" alt="History" height="24">
-        <button id="new-chat-btn" class="icon-btn" title="New Chat">
+        <button id="new-chat-btn" class="icon-btn" type="button" title="New Chat" aria-label="New chat">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="12" y1="5" x2="12" y2="19"></line>
             <line x1="5" y1="12" x2="19" y2="12"></line>
@@ -62,13 +67,19 @@
     <!-- ═══════════════ MAIN CHAT AREA ═══════════════ -->
     <main id="chat-area">
       <!-- Connection status bar -->
-      <div id="status-bar" class="status-bar status-connecting">
+      <div id="status-bar" class="status-bar status-connecting" role="status" aria-live="polite">
         <div class="status-dot"></div>
         <span id="status-text">Connecting to Yolo agent...</span>
       </div>
 
       <!-- Chat header -->
       <div id="chat-header">
+        <button id="sidebar-toggle-btn" class="icon-btn" type="button" title="Toggle history sidebar" aria-label="Toggle history sidebar">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+            <line x1="9" y1="3" x2="9" y2="21"/>
+          </svg>
+        </button>
         <div class="logo-wrapper">
           <img src="assets/logo.svg" alt="YOLO" height="28" style="display: block; border-radius: 4px;">
         </div>
@@ -78,10 +89,10 @@
           <span id="chat-subtitle" class="chat-subtitle">0 MSGS · 0 TOKENS · 0 LLM CALLS</span>
         </div>
         <div class="chat-header-actions">
-          <button id="mode-toggle" class="icon-btn" title="Toggle YOLO mode">
+          <button id="mode-toggle" class="icon-btn" type="button" title="Toggle Safe/YOLO mode" aria-pressed="false" aria-label="Toggle Safe/YOLO mode">
             <span class="mode-label">Safe</span>
           </button>
-          <button id="workers-toggle-btn" class="icon-btn" title="View Workers">
+          <button id="workers-toggle-btn" class="icon-btn" type="button" title="View workers" aria-controls="workers-panel" aria-expanded="false">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
               stroke-linecap="round" stroke-linejoin="round">
               <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
@@ -90,7 +101,7 @@
               <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
             </svg>
           </button>
-          <button id="refresh-btn" class="icon-btn" title="Refresh Chat">
+          <button id="refresh-btn" class="icon-btn" type="button" title="Refresh chat" aria-label="Refresh chat">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
               stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 2v6h-6"></path>
@@ -99,7 +110,7 @@
               <path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path>
             </svg>
           </button>
-          <button id="settings-btn" class="icon-btn" title="Settings">
+          <button id="settings-btn" class="icon-btn" type="button" title="Settings" aria-haspopup="dialog" aria-controls="settings-modal">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
               stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="3" />
@@ -112,14 +123,45 @@
 
       <!-- Messages container -->
       <div id="messages-container">
-        <div id="messages" class="messages">
+        <div id="messages" class="messages" role="log" aria-live="polite" aria-relevant="additions text" aria-label="Chat messages">
           <!-- Welcome state -->
           <div id="welcome-screen" class="welcome-screen">
             <div class="welcome-logo-wrapper">
               <img src="assets/logo.svg" alt="YOLO" class="welcome-logo-img">
             </div>
             <h1 class="welcome-title">Welcome to <span class="yolo-logo-text">YOL<span class="o-red">O</span></span></h1>
-            <p>Your autonomous AI agent. Ask anything — code, research, system control, and more.</p>
+            <p class="welcome-desc">Your autonomous AI agent. Ask anything — code, research, system control, and more.</p>
+            
+            <div class="welcome-cards">
+              <div class="welcome-card" data-prompt="Generate a Next.js landing page with premium glassmorphism CSS styling.">
+                <div class="card-icon">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/><line x1="14" y1="2" x2="10" y2="22"/></svg>
+                </div>
+                <h3>Write Code</h3>
+                <p>Generate a Next.js landing page with glassmorphism CSS styling.</p>
+              </div>
+              <div class="welcome-card" data-prompt="Analyze and compare the latest browser automation libraries. What are the trade-offs?">
+                <div class="card-icon">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                </div>
+                <h3>Deep Research</h3>
+                <p>Analyze and compare the latest browser automation libraries.</p>
+              </div>
+              <div class="welcome-card" data-prompt="Check the CPU load, running tasks, and active network connections.">
+                <div class="card-icon">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+                </div>
+                <h3>System Control</h3>
+                <p>Check the CPU load, running tasks, and active network connections.</p>
+              </div>
+              <div class="welcome-card" data-prompt="Brainstorm some innovative startup ideas combining AI and developer productivity.">
+                <div class="card-icon">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                </div>
+                <h3>General Chat</h3>
+                <p>Brainstorm startup ideas or chat about anything on your mind.</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -128,7 +170,7 @@
       <div id="input-area">
         <div class="input-wrapper floating-input">
           <input type="file" id="file-upload" style="display: none;" multiple />
-          <div id="attach-menu" class="attach-menu hidden">
+          <div id="attach-menu" class="attach-menu hidden" aria-hidden="true">
             <button class="attach-menu-item" data-type="image">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
               <span>Images</span>
@@ -138,7 +180,7 @@
               <span>Files</span>
             </button>
           </div>
-          <button id="attach-btn" class="input-icon-btn" title="Attach file">
+          <button id="attach-btn" class="input-icon-btn" type="button" title="Attach" aria-label="Attach" aria-haspopup="menu" aria-controls="attach-menu" aria-expanded="false">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
               stroke-linecap="round" stroke-linejoin="round">
               <path
@@ -168,19 +210,19 @@
           </div>
 
           <div class="input-actions-right">
-            <button id="stop-btn" class="custom-stop-btn hidden" title="Stop generating">
+            <button id="stop-btn" class="custom-stop-btn hidden" type="button" title="Stop generating" aria-label="Stop generating">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                 <rect x="6" y="6" width="12" height="12" rx="2" ry="2"></rect>
               </svg>
             </button>
-            <button id="voice-btn" class="input-icon-btn voice-btn" title="Voice message">
+            <button id="voice-btn" class="input-icon-btn voice-btn" type="button" title="Voice message" aria-label="Record voice message" aria-pressed="false">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
                 <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
                 <line x1="12" y1="19" x2="12" y2="22"></line>
               </svg>
             </button>
-            <button id="send-btn" class="custom-send-btn" title="Send message" disabled>
+            <button id="send-btn" class="custom-send-btn" type="button" title="Send message" aria-label="Send message" disabled>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="12" y1="19" x2="12" y2="5"></line>
                 <polyline points="5 12 12 5 19 12"></polyline>
@@ -196,11 +238,11 @@
     </main>
 
     <!-- ═══════════════ SETTINGS MODAL ═══════════════ -->
-    <div id="settings-modal" class="modal-overlay hidden">
+    <div id="settings-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="settings-category-title" aria-hidden="true">
       <div class="settings-modal-container">
         <div class="settings-sidebar">
           <div class="settings-sidebar-header">
-            <button id="toggle-settings-sidebar" class="icon-btn collapse-btn" title="Toggle Sidebar">
+            <button id="toggle-settings-sidebar" class="icon-btn collapse-btn" type="button" title="Toggle sidebar" aria-label="Toggle settings sidebar" aria-expanded="true">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="11 17 6 12 11 7"></polyline><polyline points="18 17 13 12 18 7"></polyline></svg>
             </button>
           </div>
@@ -330,7 +372,7 @@
                   <input id="setting-base-url" type="text" placeholder="http://localhost:11434/v1" class="setting-input-small" style="width: 150px;" />
                 </div>
                 <div class="setting-item" style="justify-content: flex-end; border-bottom: none; padding-bottom: 0;">
-                  <button id="save-llm-settings" class="primary-btn">
+                  <button id="save-llm-settings" class="primary-btn" type="button">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                       <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
                       <polyline points="17 21 17 13 7 13 7 21"></polyline>
@@ -352,7 +394,7 @@
                     <span>Choose between light and dark modes.</span>
                   </div>
                   <div class="theme-selector">
-                    <button class="theme-btn active" data-theme="dark">Dark</button>
+                    <button class="theme-btn active" type="button" data-theme="dark">Dark</button>
                     <button class="theme-btn" data-theme="light">Light</button>
                   </div>
                 </div>
@@ -400,14 +442,14 @@
                     <label>Consolidate Memories</label>
                     <span>Force move L2 episodic memories into L3 semantic storage.</span>
                   </div>
-                  <button id="btn-consolidate" class="secondary-btn">Consolidate Now</button>
+                  <button id="btn-consolidate" class="secondary-btn" type="button">Consolidate Now</button>
                 </div>
                 <div class="setting-item">
                   <div class="setting-info">
                     <label>Danger Zone</label>
                     <span>Permanently wipe all long-term memories for this user.</span>
                   </div>
-                  <button id="btn-wipe-memory" class="danger-btn">Wipe All Memory</button>
+                  <button id="btn-wipe-memory" class="danger-btn" type="button">Wipe All Memory</button>
                 </div>
               </div>
             </div>
@@ -473,7 +515,7 @@
     <div id="workers-panel" class="workers-panel hidden">
       <div class="workers-header">
         <img src="assets/workers.svg" alt="Background Workers" height="24">
-        <button id="close-workers" class="icon-btn" title="Close workers">
+        <button id="close-workers" class="icon-btn" type="button" title="Close workers" aria-label="Close workers">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
             stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18" />
@@ -506,5 +548,7 @@
     
 <script src="app.js"></script>
 </body>
+
+</html>
 
 </html>

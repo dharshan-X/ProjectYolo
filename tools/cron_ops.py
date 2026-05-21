@@ -39,6 +39,21 @@ def schedule_task(user_id: int, task_description: str, interval_minutes: int) ->
         return f"Error scheduling task: {e}"
 
 
+def format_utc_to_local(utc_str: str) -> str:
+    if not utc_str:
+        return "Never"
+    try:
+        from datetime import datetime, timezone
+        try:
+            utc_dt = datetime.strptime(utc_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+        except ValueError:
+            utc_dt = datetime.fromisoformat(utc_str.replace("Z", "+00:00")).astimezone(timezone.utc)
+        local_dt = utc_dt.astimezone()
+        return local_dt.strftime("%Y-%m-%d %H:%M:%S %Z")
+    except Exception:
+        return utc_str
+
+
 @register_tool()
 def get_scheduled_tasks(user_id: int) -> str:
     """List all currently active scheduled tasks."""
@@ -49,7 +64,8 @@ def get_scheduled_tasks(user_id: int) -> str:
 
         output = "### Active Scheduled Tasks:\n\n"
         for cid, desc, next_run in tasks:
-            output += f"- ID `{cid}`: {desc} (Next run: `{next_run}`)\n"
+            local_next_run = format_utc_to_local(next_run)
+            output += f"- ID `{cid}`: {desc} (Next run: `{local_next_run}`)\n"
 
         audit_log("get_scheduled_tasks", {}, "success")
         return output

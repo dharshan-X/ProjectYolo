@@ -120,6 +120,7 @@ async def repl(user_id: int, initial_prompt: Optional[str] = None) -> None:
                             user_id,
                             signal_handler=None,
                             session=session,
+                            confirmed=True,
                         ),
                         e.action
                     )
