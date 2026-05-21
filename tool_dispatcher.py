@@ -1,8 +1,24 @@
 import asyncio
 import json
+import threading
 from typing import Any, Callable, Optional, List, Dict
-from colorama import Fore
 from session import Session
+
+
+async def _run_sync_callable(func: Callable, kwargs: dict) -> Any:
+    loop = asyncio.get_running_loop()
+    future = loop.create_future()
+
+    def runner() -> None:
+        try:
+            result = func(**kwargs)
+        except Exception as exc:
+            loop.call_soon_threadsafe(future.set_exception, exc)
+        else:
+            loop.call_soon_threadsafe(future.set_result, result)
+
+    threading.Thread(target=runner, daemon=True).start()
+    return await future
 
 async def execute_tool_direct(
     func_name: str,
@@ -11,10 +27,8 @@ async def execute_tool_direct(
     signal_handler: Optional[Callable] = None,
     session: Any = None,
     call_id: Optional[str] = None,
+    confirmed: bool = False,
 ) -> str:
-    import agent
-    from agent import log_agent, run_agent_turn
-    from prompt_builder import get_background_initial_messages, _compact_history
     if isinstance(func_args, str):
         try:
             func_args = json.loads(func_args)
@@ -24,13 +38,18 @@ async def execute_tool_direct(
     if not isinstance(func_args, dict):
         return f"Error: Invalid arguments for {func_name}; expected object."
 
-    log_agent(user_id, "🔧 TOOL", f"{func_name}({func_args})", Fore.YELLOW)
+    from tools.base import audit_log
+
+    audit_log("tool_call", {"user_id": user_id, "name": func_name, "args": func_args}, "info")
     if signal_handler:
         await signal_handler(
-            f"{agent.TUIMessage.TOOL_CALL}:{json.dumps({'name': func_name, 'args': func_args, 'call_id': call_id})}"
+            f"__TOOL_CALL__:{json.dumps({'name': func_name, 'args': func_args, 'call_id': call_id})}"
         )
     async def _run_with_history_sync(tid: str, objective: str, parent_session: Any, orig_handler: Any):
         from tools.database_ops import update_background_task_history
+        from agent import run_agent_turn
+        from prompt_builder import get_background_initial_messages
+
         worker_session = Session(
             user_id=parent_session.user_id,
             task_id=tid,
@@ -70,7 +89,14 @@ async def execute_tool_direct(
     else:
         # ── Path 2: Native / Plugin tool ──
         target = TOOL_REGISTRY.get(func_name) or PLUGIN_HANDLERS.get(func_name)
+        if not target and func_name in {"codebase_index", "codebase_search"}:
+            import importlib
+
+            importlib.import_module("tools.codebase_ops")
+            target = TOOL_REGISTRY.get(func_name)
         if func_name == "compact_conversation":
+            from prompt_builder import _compact_history
+
             target = _compact_history
 
         if target:
@@ -84,7 +110,7 @@ async def execute_tool_direct(
                 import agent as _agent_mod
                 func_args["router"] = getattr(_agent_mod, "router", None)
             if "confirm_func" in sig.parameters and "confirm_func" not in func_args:
-                func_args["confirm_func"] = lambda a, t: True
+                func_args["confirm_func"] = lambda _action, _target: bool(confirmed)
 
             # Special-case injections for complex background task runners
             if func_name == "run_background_mission" and "mission_coro" in sig.parameters:
@@ -100,14 +126,19 @@ async def execute_tool_direct(
                     if inspect.iscoroutinefunction(target):
                         res = await target(**func_args)
                     else:
-                        res = await asyncio.to_thread(lambda: target(**func_args))
+                        res = await _run_sync_callable(target, func_args)
                         if inspect.iscoroutine(res):
                             res = await res
                     break
                 except _TRANSIENT_ERRORS as retry_err:
                     if _attempt < _MAX_RETRIES:
                         backoff = (2**_attempt) * 0.5
-                        log_agent(user_id, "🔄 RETRY", f"{func_name} attempt {_attempt+1} failed: {retry_err}. Retrying in {backoff}s...", Fore.YELLOW)
+                        audit_log(
+                            "tool_retry",
+                            {"user_id": user_id, "name": func_name, "attempt": _attempt + 1},
+                            "error",
+                            f"{retry_err}; retrying in {backoff}s",
+                        )
                         await asyncio.sleep(backoff)
                     else:
                         res = f"Error after {_MAX_RETRIES + 1} attempts: {retry_err}"
@@ -118,9 +149,9 @@ async def execute_tool_direct(
             # Tool not found in any registry
             if signal_handler:
                 await signal_handler(
-                    f"{agent.TUIMessage.TOOL_RESULT}:{json.dumps({'name': func_name, 'result': f'Error: {func_name} not found.', 'call_id': call_id})}"
+                    f"__TOOL_RESULT__:{json.dumps({'name': func_name, 'result': f'Error: {func_name} not found.', 'call_id': call_id})}"
                 )
-            log_agent(user_id, "❌ RESULT", f"{func_name} not found in any registry", Fore.RED)
+            audit_log("tool_result", {"user_id": user_id, "name": func_name}, "error", "not found")
             return f"Error: {func_name} not found."
 
     # ── Common result handling for both paths ──
@@ -131,7 +162,7 @@ async def execute_tool_direct(
 
     if signal_handler:
         await signal_handler(
-            f"{agent.TUIMessage.TOOL_RESULT}:{json.dumps({'name': func_name, 'result': res, 'call_id': call_id})}"
+            f"__TOOL_RESULT__:{json.dumps({'name': func_name, 'result': res, 'call_id': call_id})}"
         )
 
     if signal_handler and isinstance(res, str) and res.startswith("__SEND_FILE__:"):
@@ -139,11 +170,11 @@ async def execute_tool_direct(
         if sig_res:
             res = sig_res
 
-    log_agent(
-        user_id,
-        "✅ RESULT",
+    audit_log(
+        "tool_result",
+        {"user_id": user_id, "name": func_name},
+        "success",
         str(res)[:200] + "..." if len(str(res)) > 200 else str(res),
-        Fore.GREEN,
     )
     return res
 
@@ -189,4 +220,3 @@ def sanitize_history(history: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             i += 1
 
     return sanitized
-

@@ -62,9 +62,7 @@ class SessionManager:
 
     def get_lock(self, user_id: int) -> asyncio.Lock:
         user_id = self.resolve_id(user_id)
-        if user_id not in self.locks:
-            self.locks[user_id] = asyncio.Lock()
-        return self.locks[user_id]
+        return self.locks.setdefault(user_id, asyncio.Lock())
 
     def get_or_create(self, user_id: int) -> Session:
         user_id = self.resolve_id(user_id)
@@ -120,7 +118,7 @@ class SessionManager:
                 len(session.pending_confirmations),
             )
         )
-        if not force and signature == session.last_saved_signature:
+        if not force and not session.history_dirty and signature == session.last_saved_signature:
             return
 
         save_session(
@@ -132,6 +130,7 @@ class SessionManager:
             session.pending_confirmations,
         )
         session.last_saved_signature = signature
+        session.history_dirty = False
 
     def clear(self, user_id: int):
         user_id = self.resolve_id(user_id)

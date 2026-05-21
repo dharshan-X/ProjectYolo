@@ -89,6 +89,9 @@ logger = logging.getLogger(__name__)
 # Session Manager
 session_manager = SessionManager(timeout_minutes=TIMEOUT_MINUTES)
 
+# Keep strong references to background tasks to prevent garbage collection
+_background_tasks: set[asyncio.Task] = set()
+
 
 def log_bot(user_id: int, tag: str, message: str, color: str = Fore.CYAN):
     if VERBOSE:
@@ -255,6 +258,10 @@ async def prepare_native_multi_modal(
                 })
             else:
                 parts.append({"type": "text", "text": f"\n\n[Omitted Audio: {original_name}. Native audio not supported by current model.]"})
+        elif media_path.suffix.lower() in (".pdf", ".docx", ".pptx", ".xlsx", ".md"):
+            from tools.document_parser import extract_text_from_file
+            parsed_text = extract_text_from_file(media_path)
+            parts.append({"type": "text", "text": f"\n\nFile `{original_name}` content:\n{parsed_text}"})
         else:
             if len(data) < 50000:
                 try:
@@ -893,6 +900,16 @@ async def process_agent_turn(
             session_manager.save(user_id)
         except Exception:
             logger.exception("Error in process_agent_turn")
+            try:
+                if update.message:
+                    await update.message.reply_text("⚠️ An internal error occurred. Please try again.")
+                elif update.effective_chat:
+                    await context.bot.send_message(
+                        chat_id=update.effective_chat.id,
+                        text="⚠️ An internal error occurred. Please try again.",
+                    )
+            except Exception:
+                pass  # Best-effort error notification
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -900,15 +917,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     assert update.effective_user is not None
     user_id = update.effective_user.id
-    # Check pending confirmations outside the lock
-    session = session_manager.get_or_create(user_id)
-    if session.pending_confirmations:
-        assert update.message is not None
-        await update.message.reply_text(
-            f"Pending confirmations required ({len(session.pending_confirmations)} tasks)\\.",
-            parse_mode=ParseMode.MARKDOWN_V2,
-        )
-        return
+    # BUG-26 fix: Check pending confirmations INSIDE the lock to prevent TOCTOU race
+    async with session_manager.get_lock(user_id):
+        session = session_manager.get_or_create(user_id)
+        if session.pending_confirmations:
+            assert update.message is not None
+            await update.message.reply_text(
+                f"Pending confirmations required ({len(session.pending_confirmations)} tasks)\\.",
+                parse_mode=ParseMode.MARKDOWN_V2,
+            )
+            return
     assert update.message
     await process_agent_turn(update, context, update.message.text)
 
@@ -1140,16 +1158,20 @@ async def send_long_message(
 
 
 async def post_init(application: Application) -> None:
-    asyncio.create_task(session_manager.auto_expiry_task())
+    task_expiry = asyncio.create_task(session_manager.auto_expiry_task())
+    _background_tasks.add(task_expiry)
+    task_expiry.add_done_callback(_background_tasks.discard)
 
     # Start the desktop bridge so the Electron app can connect on-demand.
     # Runs as a background task inside PTB's event loop, sharing session_manager.
     if os.getenv("ENABLE_DESKTOP_BRIDGE", "true").lower() == "true":
         try:
             from desktop.api_bridge import run_desktop_bridge
-            asyncio.create_task(run_desktop_bridge(
+            task_bridge = asyncio.create_task(run_desktop_bridge(
                 shared_session_manager=session_manager,
             ))
+            _background_tasks.add(task_bridge)
+            task_bridge.add_done_callback(_background_tasks.discard)
         except Exception as e:
             logger.warning(f"Desktop bridge failed to start: {e}")
 
@@ -1324,13 +1346,20 @@ async def post_init(application: Application) -> None:
                                         chat_id=u_id, text=plain_msg
                                     )
 
-                    asyncio.create_task(run_cron_task(cid, uid, desc, interval))
+                    task_cron = asyncio.create_task(run_cron_task(cid, uid, desc, interval))
+                    _background_tasks.add(task_cron)
+                    task_cron.add_done_callback(_background_tasks.discard)
                     update_cron_run(cid, interval)
             except Exception as e:
                 logger.error(f"Cron worker loop error: {e}")
 
-    asyncio.create_task(notification_worker())
-    asyncio.create_task(cron_worker())
+    task_notification = asyncio.create_task(notification_worker())
+    _background_tasks.add(task_notification)
+    task_notification.add_done_callback(_background_tasks.discard)
+
+    task_cron_worker = asyncio.create_task(cron_worker())
+    _background_tasks.add(task_cron_worker)
+    task_cron_worker.add_done_callback(_background_tasks.discard)
     await application.bot.set_my_commands(
         [
             BotCommand("start", "Start"),

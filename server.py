@@ -1,18 +1,28 @@
 import argparse
 import asyncio
+import logging
 import os
 
-from bot import main as telegram_main
 from discord_gateway import run_discord_gateway
 from health_server import run_health_server
 
+logger = logging.getLogger(__name__)
 
 async def _serve(mode: str) -> None:
     tasks = []
 
     if mode in {"telegram", "all"}:
+        from bot import main as telegram_main
+
         # Run telegram polling in a worker thread.
         tasks.append(asyncio.create_task(asyncio.to_thread(telegram_main)))
+
+    if mode == "all":
+        logger.warning(
+            "Running multiple gateways in '--mode all'. Note: Telegram runs in a separate "
+            "thread with its own event loop. Sessions and asyncio locks are NOT shared "
+            "between gateways."
+        )
 
     if mode in {"discord", "all"}:
         tasks.append(asyncio.create_task(run_discord_gateway()))

@@ -3,12 +3,72 @@ Menu.setApplicationMenu(null);
 
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const { spawn } = require('child_process');
 
 let mainWindow;
 let tray;
 let pyBridge;
+
+function getBridgeToken() {
+  // 1. Environment variable
+  if (process.env.DESKTOP_BRIDGE_TOKEN) {
+    return process.env.DESKTOP_BRIDGE_TOKEN;
+  }
+
+  // 2. Persistent file (~/.yolo/.bridge_token)
+  const yoloHome = process.env.YOLO_HOME 
+    ? path.resolve(process.env.YOLO_HOME)
+    : path.join(require('os').homedir(), '.yolo');
+  const tokenFile = path.join(yoloHome, '.bridge_token');
+
+  if (fs.existsSync(tokenFile)) {
+    try {
+      return fs.readFileSync(tokenFile, 'utf8').trim();
+    } catch (err) {
+      console.error('[main] Failed to read bridge token file:', err);
+    }
+  }
+
+  // 3. Generate new and persist
+  const newToken = crypto.randomBytes(32).toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, ''); // Roughly match Python's urlsafe_token
+  
+  try {
+    if (!fs.existsSync(yoloHome)) {
+      fs.mkdirSync(yoloHome, { recursive: true });
+    }
+    fs.writeFileSync(tokenFile, newToken, { encoding: 'utf8', mode: 0o600 });
+  } catch (err) {
+    console.warn('[main] Could not persist bridge token:', err);
+  }
+
+  return newToken;
+}
+
 const BRIDGE_PORT = parseInt(process.env.DESKTOP_BRIDGE_PORT || '8790', 10);
+const BRIDGE_TOKEN = getBridgeToken();
+process.env.DESKTOP_BRIDGE_TOKEN = BRIDGE_TOKEN;
+
+function bridgeUrl(pathname) {
+  return `http://127.0.0.1:${BRIDGE_PORT}${pathname}`;
+}
+
+function bridgeOptions(options = {}) {
+  return {
+    ...options,
+    headers: {
+      ...(options.headers || {}),
+      'X-Yolo-Bridge-Token': BRIDGE_TOKEN,
+    },
+  };
+}
+
+function bridgeFetch(pathname, options = {}) {
+  return fetch(bridgeUrl(pathname), bridgeOptions(options));
+}
 
 function toggleWindow() {
   if (!mainWindow) {
@@ -36,12 +96,12 @@ function createTray() {
       click: async () => {
         try {
           // Fetch current session to determine current mode
-          const resp = await fetch(`http://127.0.0.1:${BRIDGE_PORT}/session?user_id=1`);
+          const resp = await bridgeFetch('/session?user_id=1');
           const session = await resp.json();
           const newMode = session.yolo_mode ? 'safe' : 'yolo';
           
           // Toggle via /command endpoint
-          await fetch(`http://127.0.0.1:${BRIDGE_PORT}/command`, {
+          await bridgeFetch('/command', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ command: 'mode', args: [newMode], user_id: 1 }),
@@ -154,7 +214,7 @@ function createWindow() {
 
 ipcMain.handle('send-message', async (_event, { message, userId, attachments }) => {
   try {
-    const resp = await fetch(`http://127.0.0.1:${BRIDGE_PORT}/chat`, {
+    const resp = await bridgeFetch('/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message, user_id: userId || 1, attachments: attachments || [] }),
@@ -167,7 +227,7 @@ ipcMain.handle('send-message', async (_event, { message, userId, attachments }) 
 
 ipcMain.handle('get-session', async (_event, { userId }) => {
   try {
-    const resp = await fetch(`http://127.0.0.1:${BRIDGE_PORT}/session?user_id=${userId || 1}`, { cache: 'no-store' });
+    const resp = await bridgeFetch(`/session?user_id=${userId || 1}`, { cache: 'no-store' });
     return await resp.json();
   } catch {
     return { messages: [], history_length: 0 };
@@ -176,7 +236,7 @@ ipcMain.handle('get-session', async (_event, { userId }) => {
 
 ipcMain.handle('get-sessions', async () => {
   try {
-    const resp = await fetch(`http://127.0.0.1:${BRIDGE_PORT}/sessions`, { cache: 'no-store' });
+    const resp = await bridgeFetch('/sessions', { cache: 'no-store' });
     return await resp.json();
   } catch {
     return { sessions: [] };
@@ -185,7 +245,7 @@ ipcMain.handle('get-sessions', async () => {
 
 ipcMain.handle('health-check', async () => {
   try {
-    const resp = await fetch(`http://127.0.0.1:${BRIDGE_PORT}/health`, { cache: 'no-store' });
+    const resp = await bridgeFetch('/health', { cache: 'no-store' });
     return await resp.json();
   } catch {
     return { status: 'offline' };
@@ -194,7 +254,7 @@ ipcMain.handle('health-check', async () => {
 
 ipcMain.handle('fetch-workers', async (_event, userId) => {
   try {
-    const resp = await fetch(`http://127.0.0.1:${BRIDGE_PORT}/workers?user_id=${userId || 1}`, { cache: 'no-store' });
+    const resp = await bridgeFetch(`/workers?user_id=${userId || 1}`, { cache: 'no-store' });
     return await resp.json();
   } catch {
     return { workers: [] };
@@ -203,7 +263,7 @@ ipcMain.handle('fetch-workers', async (_event, userId) => {
 
 ipcMain.handle('fetch-worker-session', async (_event, taskId) => {
   try {
-    const resp = await fetch(`http://127.0.0.1:${BRIDGE_PORT}/workers/${taskId}/session`, { cache: 'no-store' });
+    const resp = await bridgeFetch(`/workers/${taskId}/session`, { cache: 'no-store' });
     return await resp.json();
   } catch {
     return { messages: [] };
@@ -212,7 +272,7 @@ ipcMain.handle('fetch-worker-session', async (_event, taskId) => {
 
 ipcMain.handle('run-command', async (_event, { command, args, userId, attachments }) => {
   try {
-    const resp = await fetch(`http://127.0.0.1:${BRIDGE_PORT}/command`, {
+    const resp = await bridgeFetch('/command', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ command, args: args || [], user_id: userId || 1, attachments: attachments || [] }),
@@ -239,7 +299,7 @@ ipcMain.handle('show-confirmation-dialog', async (_event, details) => {
 
 ipcMain.handle('confirm-action', async (_event, { confirmed, userId }) => {
   try {
-    const resp = await fetch(`http://127.0.0.1:${BRIDGE_PORT}/confirm`, {
+    const resp = await bridgeFetch('/confirm', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ confirmed, user_id: userId || 1 }),
@@ -270,7 +330,7 @@ ipcMain.handle('stream-chat', async (_event, { message, userId, attachments }) =
   currentAbortController = new AbortController();
 
   try {
-    const resp = await fetch(`http://127.0.0.1:${BRIDGE_PORT}/chat/stream`, {
+    const resp = await bridgeFetch('/chat/stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message, user_id: userId || 1, attachments: attachments || [] }),
@@ -340,7 +400,7 @@ ipcMain.handle('abort-chat-stream', () => {
 
 ipcMain.handle('transcribe', async (_event, { audio }) => {
   try {
-    const resp = await fetch(`http://127.0.0.1:${BRIDGE_PORT}/transcribe`, {
+    const resp = await bridgeFetch('/transcribe', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ audio }),
@@ -353,7 +413,7 @@ ipcMain.handle('transcribe', async (_event, { audio }) => {
 
 ipcMain.handle('update-env', async (_event, payload) => {
   try {
-    const resp = await fetch(`http://127.0.0.1:${BRIDGE_PORT}/config/env`, {
+    const resp = await bridgeFetch('/config/env', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -370,7 +430,7 @@ ipcMain.handle('get-bridge-port', () => {
 
 ipcMain.handle('get-mcp-servers', async () => {
   try {
-    const resp = await fetch(`http://127.0.0.1:${BRIDGE_PORT}/mcp/servers`);
+    const resp = await bridgeFetch('/mcp/servers');
     return await resp.json();
   } catch (err) {
     return { error: err.message };
@@ -379,7 +439,7 @@ ipcMain.handle('get-mcp-servers', async () => {
 
 ipcMain.handle('update-mcp-servers', async (_event, payload) => {
   try {
-    const resp = await fetch(`http://127.0.0.1:${BRIDGE_PORT}/mcp/servers`, {
+    const resp = await bridgeFetch('/mcp/servers', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -391,12 +451,26 @@ ipcMain.handle('update-mcp-servers', async (_event, payload) => {
 });
 
 ipcMain.handle('open-external', async (_event, url) => {
-  await shell.openExternal(url);
-  return { ok: true };
+  // Only allow http and https URLs
+  try {
+    const parsed = new URL(url);
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      return { error: `Blocked: unsafe URL scheme '${parsed.protocol}'` };
+    }
+    await shell.openExternal(url);
+    return { ok: true };
+  } catch (err) {
+    return { error: err.message };
+  }
 });
 
 ipcMain.handle('open-path', async (_event, filePath) => {
-  const err = await shell.openPath(filePath);
+  // Basic validation: must be absolute and not contain traversal
+  const resolved = path.resolve(filePath);
+  if (resolved !== filePath && !resolved.startsWith(path.resolve(filePath))) {
+    return { error: 'Path validation failed' };
+  }
+  const err = await shell.openPath(resolved);
   if (err) return { error: err };
   return { ok: true };
 });
@@ -415,7 +489,20 @@ app.whenReady().then(() => {
 
   pyBridge = spawn(pythonCmd, [path.join(__dirname, 'api_bridge.py')], { 
     stdio: 'inherit',
-    env: { ...process.env, PYTHONUNBUFFERED: '1' }
+    env: { ...process.env, PYTHONUNBUFFERED: '1' },
+    detached: false
+  });
+
+  pyBridge.on('exit', (code, signal) => {
+    console.error(`[main] Python bridge exited (code=${code}, signal=${signal})`);
+    // Notify renderer
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('bridge-status', { status: 'offline', code, signal });
+    }
+  });
+
+  pyBridge.on('error', (err) => {
+    console.error('[main] Python bridge error:', err);
   });
 
   createWindow();
@@ -447,5 +534,12 @@ app.on('will-quit', () => {
 });
 
 app.on('quit', () => {
-  if (pyBridge) pyBridge.kill();
+  if (pyBridge && !pyBridge.killed) {
+    try {
+      // Kill the entire process group
+      process.kill(-pyBridge.pid, 'SIGTERM');
+    } catch (e) {
+      try { pyBridge.kill('SIGTERM'); } catch (_) {}
+    }
+  }
 });

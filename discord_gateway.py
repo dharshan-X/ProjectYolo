@@ -15,6 +15,9 @@ VERBOSE = os.getenv("VERBOSE", "false").lower() == "true"
 
 logger = logging.getLogger(__name__)
 
+# Keep strong references to background tasks to prevent garbage collection
+_background_tasks: set[asyncio.Task] = set()
+
 
 def _is_allowed_user(user_id: int) -> bool:
     raw = os.getenv("DISCORD_ALLOWED_USER_IDS", "").strip()
@@ -137,6 +140,8 @@ async def run_discord_gateway() -> None:
     session_manager = SessionManager(
         timeout_minutes=int(os.getenv("SESSION_TIMEOUT_MINUTES", "60"))
     )
-    asyncio.create_task(session_manager.auto_expiry_task())
+    task = asyncio.create_task(session_manager.auto_expiry_task())
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
     client = DiscordYoloClient(session_manager)
     await client.start(DISCORD_BOT_TOKEN)

@@ -10,6 +10,7 @@ from mcp.client.stdio import stdio_client
 from tools.base import YOLO_HOME, audit_log
 
 MCP_CONFIG_PATH = YOLO_HOME / "mcp_servers.json"
+MCP_CONNECT_TIMEOUT_SECONDS = float(os.getenv("MCP_CONNECT_TIMEOUT_SECONDS", "2"))
 
 class MCPManager:
     _instance = None
@@ -25,7 +26,7 @@ class MCPManager:
             return
         self.servers: Dict[str, dict] = {}
         self.sessions: Dict[str, ClientSession] = {}
-        self.exit_stack = AsyncExitStack()
+        self._server_tasks: List[asyncio.Task] = []
         self.tool_schemas: List[Dict[str, Any]] = []
         self._tool_to_server: Dict[str, str] = {}
         self._connections_initialized = False
@@ -71,42 +72,94 @@ class MCPManager:
             )
 
             try:
-                # Enter the stdio client context
-                read_stream, write_stream = await self.exit_stack.enter_async_context(stdio_client(server_params))
-                
-                # Enter the session context
-                session = await self.exit_stack.enter_async_context(ClientSession(read_stream, write_stream))
-                
-                await session.initialize()
+                await self._connect_server(server_name, server_params)
+            except Exception as e:
+                audit_log("mcp_manager", {"server": server_name}, "error", f"Failed to connect: {e}")
+
+    async def _connect_server(self, server_name: str, server_params: StdioServerParameters) -> None:
+        ready_event = asyncio.Event()
+        error_container = []
+
+        async def connection_task():
+            server_stack = AsyncExitStack()
+            try:
+                read_stream, write_stream = await asyncio.wait_for(
+                    server_stack.enter_async_context(stdio_client(server_params)),
+                    timeout=MCP_CONNECT_TIMEOUT_SECONDS,
+                )
+                session = await asyncio.wait_for(
+                    server_stack.enter_async_context(ClientSession(read_stream, write_stream)),
+                    timeout=MCP_CONNECT_TIMEOUT_SECONDS,
+                )
+
+                await asyncio.wait_for(
+                    session.initialize(),
+                    timeout=MCP_CONNECT_TIMEOUT_SECONDS,
+                )
+                tools = await asyncio.wait_for(
+                    session.list_tools(),
+                    timeout=MCP_CONNECT_TIMEOUT_SECONDS,
+                )
+
                 self.sessions[server_name] = session
-                
-                # Fetch tools
-                tools = await session.list_tools()
-                
+
                 for t in tools.tools:
-                    # Construct an OpenAI compatible schema
+                    tool_name = t.name
+                    # Detect and handle name collision
+                    if tool_name in self._tool_to_server:
+                        existing_server = self._tool_to_server[tool_name]
+                        audit_log("mcp_manager", {"server": server_name, "tool": tool_name}, "warning",
+                                  f"Tool name collision: '{tool_name}' already registered by '{existing_server}'. Namespacing.")
+                        tool_name = f"{server_name}__{t.name}"
                     schema = {
                         "type": "function",
                         "function": {
-                            "name": t.name,
+                            "name": tool_name,
                             "description": f"[MCP: {server_name}] {t.description or ''}",
                             "parameters": t.inputSchema or {"type": "object", "properties": {}}
                         }
                     }
                     self.tool_schemas.append(schema)
-                    self._tool_to_server[t.name] = server_name
-                    
+                    self._tool_to_server[tool_name] = server_name
+
                 audit_log("mcp_manager", {"server": server_name}, "success", "Connected and loaded tools")
+                
+                ready_event.set()
+                
+                # Keep the stack open forever until task is cancelled
+                try:
+                    await asyncio.Event().wait()
+                except asyncio.CancelledError:
+                    pass
+
             except Exception as e:
-                audit_log("mcp_manager", {"server": server_name}, "error", f"Failed to connect: {e}")
+                error_container.append(e)
+                ready_event.set()
+            finally:
+                try:
+                    await server_stack.aclose()
+                except Exception:
+                    pass
+
+        task = asyncio.create_task(connection_task())
+        await ready_event.wait()
+        
+        if error_container:
+            raise error_container[0]
+            
+        if not hasattr(self, "_server_tasks"):
+            self._server_tasks = []
+        self._server_tasks.append(task)
 
     async def cleanup(self):
         """Close all connections."""
-        try:
-            await self.exit_stack.aclose()
-        except Exception:
-            pass
-        self.exit_stack = AsyncExitStack()
+        for task in getattr(self, "_server_tasks", []):
+            task.cancel()
+            
+        if hasattr(self, "_server_tasks") and self._server_tasks:
+            await asyncio.gather(*self._server_tasks, return_exceptions=True)
+            
+        self._server_tasks = []
         self.sessions.clear()
         self.tool_schemas.clear()
         self._tool_to_server.clear()

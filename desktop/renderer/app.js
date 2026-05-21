@@ -16,6 +16,7 @@
     yoloMode: false,
     thinkMode: false,
     theme: 'dark',
+    sidebarCollapsed: false, // Added for collapsible sidebar
     selectedFiles: [], // Added for visual chips
     activePaletteIndex: -1, // Added for keyboard navigation
     workerStates: {}, // Track task_id -> status
@@ -56,15 +57,15 @@
 
   function renderActiveWidget(data) {
     window.activeWidgetData = data;
-    
+    const title = (data.text || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    let contentHtml = '';
+
     if (data.type === 'choice') {
       const optionsHtml = (data.options || []).map(opt => {
         const label = opt.label.replace(/</g, '&lt;').replace(/>/g, '&gt;');
         const val = opt.value.replace(/"/g, '&quot;');
         return `<button class="widget-btn" data-widget-id="${data.id}" data-value="${val}">${label}</button>`;
       }).join('');
-      
-      const title = (data.text || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       
       let customInputHtml = '';
       if (data.allow_custom) {
@@ -80,25 +81,63 @@
           </div>
         `;
       }
+      contentHtml = `<div class="widget-options">${optionsHtml}</div>${customInputHtml}`;
       
-      dom.activeWidgetContainer.innerHTML = `
-        <div class="dynamic-widget textbar-widget" id="widget-${data.id}">
-          <div class="widget-title">${title}</div>
-          <div class="widget-options">
-            ${optionsHtml}
-          </div>
-          ${customInputHtml}
-          <div class="widget-cancel" onclick="window.clearActiveWidget()">Cancel</div>
+    } else if (data.type === 'confirm') {
+      contentHtml = `
+        <div class="widget-options confirm-options">
+          <button class="widget-btn confirm-yes" data-widget-id="${data.id}" data-value="Yes">Yes</button>
+          <button class="widget-btn confirm-no" data-widget-id="${data.id}" data-value="No">No</button>
         </div>
       `;
       
-      dom.inputWrapper.classList.add('hidden');
-      dom.activeWidgetContainer.classList.remove('hidden');
+    } else if (data.type === 'multi-select') {
+      const optionsHtml = (data.options || []).map(opt => {
+        const label = opt.label.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const val = opt.value.replace(/"/g, '&quot;');
+        return `<button class="widget-toggle-btn" data-widget-id="${data.id}" data-value="${val}">${label}</button>`;
+      }).join('');
+      contentHtml = `
+        <div class="widget-options multi-options">${optionsHtml}</div>
+        <button class="widget-submit-btn multi-submit" data-widget-id="${data.id}">Submit Selection</button>
+      `;
       
-      if (data.allow_custom) {
-        const inputEl = dom.activeWidgetContainer.querySelector('.widget-custom-input');
-        if (inputEl) inputEl.focus();
-      }
+    } else if (data.type === 'slider') {
+      const min = data.min !== undefined ? data.min : 0;
+      const max = data.max !== undefined ? data.max : 100;
+      const step = data.step !== undefined ? data.step : 1;
+      const val = data.value !== undefined ? data.value : Math.floor((min + max) / 2);
+      
+      contentHtml = `
+        <div class="widget-slider-container">
+          <div class="slider-header">
+            <span class="slider-min">${min}</span>
+            <span class="slider-val" id="slider-val-${data.id}">${val}</span>
+            <span class="slider-max">${max}</span>
+          </div>
+          <input type="range" class="widget-slider" id="slider-${data.id}" min="${min}" max="${max}" step="${step}" value="${val}" data-widget-id="${data.id}">
+        </div>
+        <button class="widget-submit-btn slider-submit" data-widget-id="${data.id}">Submit</button>
+      `;
+    } else {
+      console.warn('Unsupported widget type:', data.type);
+      return;
+    }
+
+    dom.activeWidgetContainer.innerHTML = `
+      <div class="dynamic-widget textbar-widget" id="widget-${data.id}" data-type="${data.type}">
+        <div class="widget-title">${title}</div>
+        ${contentHtml}
+        <div class="widget-cancel" onclick="window.clearActiveWidget()">Cancel</div>
+      </div>
+    `;
+    
+    dom.inputWrapper.classList.add('hidden');
+    dom.activeWidgetContainer.classList.remove('hidden');
+    
+    if (data.type === 'choice' && data.allow_custom) {
+      const inputEl = dom.activeWidgetContainer.querySelector('.widget-custom-input');
+      if (inputEl) inputEl.focus();
     }
   }
 
@@ -163,6 +202,7 @@
     stopBtn: $('#stop-btn'),
     toggleSettingsSidebar: $('#toggle-settings-sidebar'),
     settingsSidebar: $('.settings-sidebar'),
+    sidebarToggleBtn: $('#sidebar-toggle-btn'),
   };
 
   // ── Init ──
@@ -207,6 +247,7 @@
     } catch {}
     loadPrefs();
     applyTheme();
+    applySidebarState();
     bindEvents();
     pollHealth(); // Detects user_id from backend, then hydrates session
     pollWorkers(); // Start background worker polling for notifications
@@ -283,6 +324,7 @@
         const p = JSON.parse(saved);
         state.userId = p.userId || 1;
         state.theme = p.theme || 'dark';
+        state.sidebarCollapsed = p.sidebarCollapsed || false;
       }
     } catch {}
   }
@@ -292,8 +334,20 @@
       localStorage.setItem('yolo-desktop-prefs', JSON.stringify({
         userId: state.userId,
         theme: state.theme,
+        sidebarCollapsed: state.sidebarCollapsed,
       }));
     } catch {}
+  }
+
+  function applySidebarState() {
+    if (!dom.sidebar || !dom.sidebarToggleBtn) return;
+    if (state.sidebarCollapsed) {
+      dom.sidebar.classList.add('collapsed');
+      dom.sidebarToggleBtn.classList.add('active');
+    } else {
+      dom.sidebar.classList.remove('collapsed');
+      dom.sidebarToggleBtn.classList.remove('active');
+    }
   }
 
   function applyTheme() {
@@ -322,12 +376,10 @@
         const label = dom.modeToggle.querySelector('.mode-label');
         label.textContent = state.yoloMode ? 'YOLO' : 'Safe';
         label.classList.toggle('yolo', state.yoloMode);
+        dom.modeToggle.setAttribute('aria-pressed', state.yoloMode ? 'true' : 'false');
 
         // Update subtitle (Session title removed as per request)
-        const historyLen = data.history_length || 0;
-        const totalTokens = data.total_tokens || 0;
-        const llmCalls = data.llm_call_count || 0;
-        dom.chatSubtitle.textContent = `${historyLen} MSGS · ${totalTokens} TOKENS · ${llmCalls} LLM CALLS`;
+        updateStats(data.history_length || 0, data.total_tokens || 0, data.llm_call_count || 0);
         
         // Refresh sidebar to update active item
         fetchSessions();
@@ -380,13 +432,46 @@
     const div = document.createElement('div');
     div.className = 'welcome-screen';
     div.innerHTML = `
-      <div class="welcome-icon">
-        <div class="welcome-glow"></div>
-        <span style="font-family: 'Playfair Display', serif; font-style: italic;">Y</span>
+      <div class="welcome-logo-wrapper">
+        <span style="font-family: 'Playfair Display', serif; font-style: italic; font-size: 32px; font-weight: 700; color: var(--text-primary);">Y</span>
       </div>
-      <h1 style="font-family: 'Playfair Display', serif; font-style: italic; letter-spacing: -0.02em;">Welcome to Yolo</h1>
-      <p style="font-family: 'DM Sans', sans-serif;">Your autonomous AI agent. Ask anything — code, research, system control, and more.</p>
-      <p style="font-size:12px; color:var(--text-muted); margin-top:8px;">Session is shared with Telegram &amp; CLI. Type <kbd>/</kbd> for commands.</p>
+      <h1 class="welcome-title">Welcome to <span class="yolo-logo-text">YOL<span class="o-red">O</span></span></h1>
+      <p class="welcome-desc">Your autonomous AI agent. Ask anything — code, research, system control, and more.</p>
+      
+      <div class="welcome-cards">
+        <div class="welcome-card" data-prompt="Generate a Next.js landing page with premium glassmorphism CSS styling.">
+          <div class="card-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/><line x1="14" y1="2" x2="10" y2="22"/></svg>
+          </div>
+          <h3>Write Code</h3>
+          <p>Generate a Next.js landing page with glassmorphism CSS styling.</p>
+        </div>
+        <div class="welcome-card" data-prompt="Analyze and compare the latest browser automation libraries. What are the trade-offs?">
+          <div class="card-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          </div>
+          <h3>Deep Research</h3>
+          <p>Analyze and compare the latest browser automation libraries.</p>
+        </div>
+        <div class="welcome-card" data-prompt="Check the CPU load, running tasks, and active network connections.">
+          <div class="card-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+          </div>
+          <h3>System Control</h3>
+          <p>Check the CPU load, running tasks, and active network connections.</p>
+        </div>
+        <div class="welcome-card" data-prompt="Brainstorm some innovative startup ideas combining AI and developer productivity.">
+          <div class="card-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          </div>
+          <h3>General Chat</h3>
+          <p>Brainstorm startup ideas or chat about anything on your mind.</p>
+        </div>
+      </div>
+      
+      <p style="font-size: 11px; color: var(--text-muted); margin-top: 24px; margin-bottom: 0 !important; opacity: 0.6; text-align: center;">
+        Session is shared with Telegram &amp; CLI. Type <kbd style="background: var(--bg-secondary); border: 1px solid var(--border); padding: 1px 4px; border-radius: 3px;">/</kbd> for commands.
+      </p>
     `;
     return div;
   }
@@ -424,6 +509,8 @@
       content.querySelectorAll('pre code').forEach(block => {
         try { hljs.highlightElement(block); } catch {}
       });
+      // Initialize inline widgets
+      initializeInlineWidgets(content);
     } else {
       const voiceMatch = msg.content && msg.content.match(/__VOICE_NOTE__:([^\n]+)/);
       if (voiceMatch) {
@@ -767,11 +854,11 @@
             toolDetails.className = 'tool-log-details';
             
             const summary = document.createElement('summary');
-            summary.innerHTML = `<span class="tool-status-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4"/><path d="m16.2 7.8 2.9-2.9"/><path d="M18 12h4"/><path d="m16.2 16.2 2.9 2.9"/><path d="M12 18v4"/><path d="m4.9 19.1 2.9-2.9"/><path d="M2 12h4"/><path d="m4.9 4.9 2.9 2.9"/></svg></span> Running <code>${data.name}</code>...`;
+            summary.innerHTML = `<span class="tool-status-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4"/><path d="m16.2 7.8 2.9-2.9"/><path d="M18 12h4"/><path d="m16.2 16.2 2.9 2.9"/><path d="M12 18v4"/><path d="m4.9 19.1 2.9-2.9"/><path d="M2 12h4"/><path d="m4.9 4.9 2.9 2.9"/></svg></span> Running <code>${escapeHtml(data.name)}</code>...`;
             
             const logContent = document.createElement('div');
             logContent.className = 'tool-log-content';
-            logContent.innerHTML = `<div class="tool-call-info"><strong>Arguments:</strong> <code>${JSON.stringify(data.args || {})}</code></div><div class="tool-result-placeholder">Waiting for result...</div>`;
+            logContent.innerHTML = `<div class="tool-call-info"><strong>Arguments:</strong> <code>${escapeHtml(JSON.stringify(data.args || {}))}</code></div><div class="tool-result-placeholder">Waiting for result...</div>`;
             
             toolDetails.appendChild(summary);
             toolDetails.appendChild(logContent);
@@ -795,7 +882,7 @@
               const summary = details.querySelector('summary');
               const placeholder = details.querySelector('.tool-result-placeholder');
               
-              summary.innerHTML = `<span class="tool-status-icon success"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> Executed <code>${data.name}</code>`;
+              summary.innerHTML = `<span class="tool-status-icon success"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> Executed <code>${escapeHtml(data.name)}</code>`;
               
               const resultText = typeof data.result === 'string' ? data.result : JSON.stringify(data.result, null, 2);
               placeholder.className = 'tool-result-content';
@@ -823,18 +910,18 @@
             if (data.type === 'image') {
               const fullImgUrl = getFullUrl(data.url);
               artifactWrapper.innerHTML = `
-                <div class="artifact-title">Generated Image: ${data.name}</div>
-                <img src="${fullImgUrl}" class="artifact-image" alt="${data.name}" style="max-width: 100%; border-radius: 8px; margin-top: 8px; cursor: pointer;" onclick="openLink('${data.url}')" />
+                <div class="artifact-title">Generated Image: ${escapeHtml(data.name)}</div>
+                <img src="${fullImgUrl}" class="artifact-image" alt="${escapeHtml(data.name)}" style="max-width: 100%; border-radius: 8px; margin-top: 8px; cursor: pointer;" onclick="openLink('${data.url}')" />
                 <div class="artifact-actions" style="margin-top: 8px;">
                   <button class="primary-btn sm" onclick="openLink('${data.url}')">View Full Size</button>
                 </div>
               `;
             } else {
               artifactWrapper.innerHTML = `
-                <div class="artifact-title">Generated File: ${data.name}</div>
+                <div class="artifact-title">Generated File: ${escapeHtml(data.name)}</div>
                 <div class="artifact-file-info" style="display: flex; align-items: center; gap: 10px; padding: 12px; background: rgba(0,0,0,0.05); border-radius: 8px; margin-top: 8px;">
                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14.5 2 14.5 7.5 20 7.5"></polyline></svg>
-                   <span style="font-family: monospace; font-size: 0.9em;">${data.name}</span>
+                   <span style="font-family: monospace; font-size: 0.9em;">${escapeHtml(data.name)}</span>
                 </div>
                 <div class="artifact-actions" style="margin-top: 8px;">
                   <button class="primary-btn sm" onclick="openLink('${data.url}')">Open File</button>
@@ -873,6 +960,9 @@
             streamMsg.content = streamedContent;
             appendMessageActions(streamWrapper, streamMsg);
             
+            // Initialize inline widgets after stream completes
+            initializeInlineWidgets(streamContent);
+
             // Automatically close all tool logs in this message
             streamWrapper.querySelectorAll('.tool-log-details').forEach(d => {
               d.open = false;
@@ -903,8 +993,7 @@
           await new Promise(resolve => setTimeout(resolve, 500));
         }
 
-        // Cleanup: remove the stream listener
-        window.yoloAPI.removeChatStreamListeners();
+        // Note: stream listener cleanup is now in the finally block below
 
         // Add timestamp
         const ts = document.createElement('div');
@@ -924,6 +1013,8 @@
       dom.messages.appendChild(createMessageEl(errMsg));
       scrollToBottom();
     } finally {
+      // Always clean up stream listener (BUG-30 fix)
+      window.yoloAPI.removeChatStreamListeners();
       state.isLoading = false;
       dom.stopBtn.classList.add('hidden');
       dom.voiceBtn.classList.remove('hidden');
@@ -934,44 +1025,112 @@
     const label = dom.modeToggle.querySelector('.mode-label');
     label.textContent = state.yoloMode ? 'YOLO' : 'Safe';
     label.classList.toggle('yolo', state.yoloMode);
+    if (dom.modeToggle) dom.modeToggle.setAttribute('aria-pressed', state.yoloMode ? 'true' : 'false');
+  }
+
+  function updateStats(historyLen, totalTokens, llmCalls) {
+    if (!dom.chatSubtitle) return;
+    dom.chatSubtitle.innerHTML = `
+      <span class="stat-badge">${historyLen} MSGS</span>
+      <span class="stat-badge">${totalTokens} TOKENS</span>
+      <span class="stat-badge">${llmCalls} LLM CALLS</span>
+    `;
   }
 
   async function refreshSessionMeta() {
     try {
       const data = await window.yoloAPI.getSession({ userId: state.userId });
       if (data) {
-        const historyLen = data.history_length || 0;
-        const totalTokens = data.total_tokens || 0;
-        const llmCalls = data.llm_call_count || 0;
-        dom.chatSubtitle.textContent = `${historyLen} MSGS · ${totalTokens} TOKENS · ${llmCalls} LLM CALLS`;
+        updateStats(data.history_length || 0, data.total_tokens || 0, data.llm_call_count || 0);
       }
     } catch {}
   }
 
   // ── Events ──
   function bindEvents() {
+    // Event delegation for copying code blocks
+    if (dom.messages) {
+      dom.messages.addEventListener('click', (e) => {
+        const btn = e.target.closest('.code-copy-btn');
+        if (btn) {
+          const wrapper = btn.closest('.code-block-wrapper');
+          if (wrapper) {
+            const codeEl = wrapper.querySelector('pre code');
+            if (codeEl) {
+              const text = codeEl.textContent;
+              navigator.clipboard.writeText(text).then(() => {
+                const originalText = btn.textContent;
+                btn.textContent = 'Copied!';
+                btn.classList.add('copied');
+                setTimeout(() => {
+                  btn.textContent = originalText;
+                  btn.classList.remove('copied');
+                }, 2000);
+              });
+            }
+          }
+        }
+      });
+    }
+
+    // Welcome cards click handler
+    if (dom.messages) {
+      dom.messages.addEventListener('click', (e) => {
+        const card = e.target.closest('.welcome-card');
+        if (card) {
+          const prompt = card.getAttribute('data-prompt');
+          if (prompt && dom.input) {
+            dom.input.value = prompt;
+            dom.input.focus();
+            dom.input.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+        }
+      });
+    }
+
     // Update the click listener:
+    dom.activeWidgetContainer.addEventListener('input', (e) => {
+      if (e.target.classList.contains('widget-slider')) {
+        const valSpan = document.getElementById(`slider-val-${e.target.dataset.widgetId}`);
+        if (valSpan) valSpan.textContent = e.target.value;
+      }
+    });
+
     dom.activeWidgetContainer.addEventListener('click', (e) => {
       const btn = e.target.closest('.widget-btn');
+      const toggleBtn = e.target.closest('.widget-toggle-btn');
+      const submitBtn = e.target.closest('.widget-submit-btn');
       const sendBtn = e.target.closest('.widget-custom-send-btn');
       
       const widget = e.target.closest('.dynamic-widget');
       if (!widget || widget.classList.contains('locked')) return;
 
+      if (toggleBtn) {
+        toggleBtn.classList.toggle('selected');
+        return;
+      }
+
       if (btn) {
-        // Lock the widget visually
         widget.classList.add('locked');
         btn.setAttribute('data-selected', 'true');
-
-        // Extract value
         const value = btn.getAttribute('data-value');
         const widgetId = btn.getAttribute('data-widget-id');
         
-        // Force isLoading to false so the message isn't dropped if clicked immediately
         state.isLoading = false;
-        
-        // Send the response
         sendMessage(`[Widget Response: ${widgetId}] Selected: ${value}`);
+        setTimeout(() => clearActiveWidget(), 300);
+      } else if (submitBtn) {
+        widget.classList.add('locked');
+        const widgetId = submitBtn.getAttribute('data-widget-id');
+        state.isLoading = false;
+
+        if (submitBtn.classList.contains('multi-submit')) {
+          const selected = Array.from(widget.querySelectorAll('.widget-toggle-btn.selected')).map(b => b.getAttribute('data-value'));
+          sendMessage(`[Widget Response: ${widgetId}] Selected: ${JSON.stringify(selected)}`);
+        } else if (submitBtn.classList.contains('slider-submit')) {
+          const slider = widget.querySelector('.widget-slider');
+          sendMessage(`[Widget Response: ${widgetId}] Value: ${slider.value}`);
+        }
         
         setTimeout(() => clearActiveWidget(), 300);
       } else if (sendBtn) {
@@ -981,12 +1140,8 @@
 
         widget.classList.add('locked');
         const widgetId = inputEl.getAttribute('data-widget-id');
-        
-        // Force isLoading to false so the message isn't dropped if clicked immediately
         state.isLoading = false;
-        
         sendMessage(`[Widget Response: ${widgetId}] Custom: ${value}`);
-        
         setTimeout(() => clearActiveWidget(), 300);
       }
     });
@@ -1071,6 +1226,14 @@
 
     dom.input.addEventListener('blur', () => setTimeout(hideCommandPalette, 200));
 
+    if (dom.sidebarToggleBtn) {
+      dom.sidebarToggleBtn.addEventListener('click', () => {
+        state.sidebarCollapsed = !state.sidebarCollapsed;
+        savePrefs();
+        applySidebarState();
+      });
+    }
+
     dom.modeToggle.addEventListener('click', () => {
       const newMode = state.yoloMode ? 'safe' : 'yolo';
       sendMessage(`/mode ${newMode}`);
@@ -1094,7 +1257,14 @@
     dom.attachBtn.addEventListener('mousedown', (e) => {
       e.preventDefault();
       const isHidden = dom.attachMenu.classList.toggle('hidden');
-      dom.attachBtn.classList.toggle('active', !isHidden);
+      const isOpen = !isHidden;
+      dom.attachBtn.classList.toggle('active', isOpen);
+      dom.attachBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      dom.attachMenu.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+      if (isOpen) {
+        dom.attachMenu.setAttribute('role', 'menu');
+        dom.attachMenu.querySelectorAll('button').forEach(btn => btn.setAttribute('role', 'menuitem'));
+      }
     });
 
     document.querySelectorAll('.attach-menu-item').forEach(item => {
@@ -1102,6 +1272,8 @@
         dom.input.focus(); // This will expand the bar
         dom.attachMenu.classList.add('hidden');
         dom.attachBtn.classList.remove('active');
+        dom.attachBtn.setAttribute('aria-expanded', 'false');
+        dom.attachMenu.setAttribute('aria-hidden', 'true');
         dom.fileUpload.click();
       });
     });
@@ -1112,6 +1284,8 @@
         if (!dom.attachMenu.contains(e.target) && !dom.attachBtn.contains(e.target)) {
           dom.attachMenu.classList.add('hidden');
           dom.attachBtn.classList.remove('active');
+          dom.attachBtn.setAttribute('aria-expanded', 'false');
+          dom.attachMenu.setAttribute('aria-hidden', 'true');
         }
       }
     });
@@ -1128,10 +1302,13 @@
           });
         };
         
-        if (file.type.startsWith('image/')) {
-          reader.readAsDataURL(file);
-        } else {
+        const textExtensions = ['.txt', '.md', '.py', '.js', '.ts', '.html', '.css', '.json', '.yaml', '.yml', '.csv', '.xml'];
+        const isTextFile = textExtensions.some(ext => file.name.toLowerCase().endsWith(ext));
+        
+        if (isTextFile) {
           reader.readAsText(file);
+        } else {
+          reader.readAsDataURL(file);
         }
       });
     }
@@ -1367,20 +1544,44 @@
       });
     }
 
+    let lastFocusedEl = null;
     dom.settingsBtn.addEventListener('click', () => {
+      lastFocusedEl = document.activeElement;
       dom.settingUserId.value = state.userId;
       dom.settingMode.value = state.yoloMode ? 'yolo' : 'safe';
       dom.settingsModal.classList.remove('hidden');
+      dom.settingsModal.setAttribute('aria-hidden', 'false');
       updateMemoryStats();
+      // Focus the dialog header for screen readers
+      setTimeout(() => {
+        const closeBtn = dom.closeSettings;
+        if (closeBtn) closeBtn.focus();
+      }, 0);
     });
-    dom.closeSettings.addEventListener('click', () => dom.settingsModal.classList.add('hidden'));
+    const closeSettingsModal = () => {
+      dom.settingsModal.classList.add('hidden');
+      dom.settingsModal.setAttribute('aria-hidden', 'true');
+      if (lastFocusedEl && lastFocusedEl.focus) lastFocusedEl.focus();
+    };
+    dom.closeSettings.addEventListener('click', closeSettingsModal);
     
     // Workers
     dom.workersToggleBtn.addEventListener('click', () => {
+      const willOpen = dom.workersPanel.classList.contains('hidden');
       dom.workersPanel.classList.toggle('hidden');
+      dom.workersToggleBtn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+      if (willOpen) {
+        // focus first interactive element in panel
+        setTimeout(() => {
+          const first = dom.workersPanel.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+          if (first) first.focus();
+        }, 0);
+      }
     });
     dom.closeWorkers.addEventListener('click', () => {
       dom.workersPanel.classList.add('hidden');
+      dom.workersToggleBtn.setAttribute('aria-expanded', 'false');
+      dom.workersToggleBtn.focus();
     });
 
     if (dom.toggleSettingsSidebar) {
@@ -1395,8 +1596,32 @@
       dom.workersListView.classList.remove('hidden');
       state.activeWorkerId = null;
     });
+    // Close on overlay click
     dom.settingsModal.addEventListener('click', (e) => {
-      if (e.target === dom.settingsModal) dom.settingsModal.classList.add('hidden');
+      if (e.target === dom.settingsModal) closeSettingsModal();
+    });
+
+    // Escape to close + basic focus trap
+    document.addEventListener('keydown', (e) => {
+      if (dom.settingsModal.classList.contains('hidden')) return;
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeSettingsModal();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+
+      const focusable = dom.settingsModal.querySelectorAll('button, [href], input, select, textarea, summary, [tabindex]:not([tabindex="-1"])');
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     });
     dom.settingUserId.addEventListener('change', () => {
       state.userId = parseInt(dom.settingUserId.value) || 1;
@@ -1676,6 +1901,42 @@
           processedText = processedText.substring(0, openIdx) + `<details class="thinking-space" open><summary>Thinking...</summary><div class="thinking-content">${content}</div></details>`;
         }
 
+        // 4. Intercept raw unformatted JSON widgets (if agent forgot backticks)
+        const widgetRegex = /\{\s*"type"\s*:\s*"(choice|confirm|multi-select|slider)"/g;
+        let match;
+        while ((match = widgetRegex.exec(processedText)) !== null) {
+          let openBraces = 0;
+          let endIndex = -1;
+          // Look backwards slightly to check if it's already inside backticks
+          const beforeStr = processedText.substring(Math.max(0, match.index - 10), match.index);
+          if (beforeStr.includes('`')) {
+             // Likely already in a code block, let renderer.code handle it
+             continue;
+          }
+
+          for (let i = match.index; i < processedText.length; i++) {
+            if (processedText[i] === '{') openBraces++;
+            else if (processedText[i] === '}') {
+              openBraces--;
+              if (openBraces === 0) {
+                endIndex = i;
+                break;
+              }
+            }
+          }
+          if (endIndex !== -1) {
+            const jsonStr = processedText.substring(match.index, endIndex + 1);
+            try {
+              const data = JSON.parse(jsonStr);
+              if (data && data.type) {
+                const wrapped = '\n```widget\n' + jsonStr + '\n```\n';
+                processedText = processedText.substring(0, match.index) + wrapped + processedText.substring(endIndex + 1);
+                widgetRegex.lastIndex = match.index + wrapped.length;
+              }
+            } catch (e) {}
+          }
+        }
+
         const renderer = new marked.Renderer();
         const originalCodeRenderer = renderer.code.bind(renderer);
 
@@ -1692,31 +1953,117 @@
             lang = language;
           }
 
-          if (lang === 'widget') {
+          if (lang === 'widget' || lang === 'json' || !lang) {
             try {
               const data = JSON.parse(codeText);
-              if (typeof renderActiveWidget === 'function') {
+              if (data && data.type && typeof renderActiveWidget === 'function') {
+                // If it successfully parses and has a type, treat it as a widget
                 renderActiveWidget(data);
+                return `<div class="widget-placeholder"><em>[Interactive Widget Expanded]</em></div>`;
               }
-              return `<div class="widget-placeholder"><em>[Interactive Widget Expanded]</em></div>`;
             } catch (e) {
-              console.error("Failed to parse widget JSON:", e);
+              if (lang === 'widget') {
+                console.error("Failed to parse widget JSON:", e);
+              }
+              // If it's json or empty, just ignore the parse error and fall through to standard code block rendering
             }
           }
 
+          if (lang === 'mermaid') {
+            return `<div class="inline-widget inline-mermaid" data-raw="${escapeHtml(codeText)}"><div style="color:var(--text-muted); font-size:12px; padding:10px;">Rendering Diagram...</div></div>`;
+          }
+
+          if (lang === 'chart') {
+            return `<div class="inline-widget inline-chart-wrapper"><canvas class="inline-chart" data-chart="${escapeHtml(codeText)}"></canvas></div>`;
+          }
+
+          if (lang === 'stack') {
+            try {
+              const data = JSON.parse(codeText);
+              if (data && data.items && Array.isArray(data.items)) {
+                const direction = data.direction === 'horizontal' ? 'row' : 'column';
+                const itemsHtml = data.items.map(item => `
+                  <div class="stack-item">
+                    <span class="stack-label">${escapeHtml(item.label || '')}</span>
+                    <span class="stack-value">${escapeHtml(item.value || '')}</span>
+                  </div>
+                `).join('');
+                return `
+                  <div class="inline-widget inline-stack direction-${direction}">
+                    ${data.title ? `<div class="stack-title">${escapeHtml(data.title)}</div>` : ''}
+                    <div class="stack-items">${itemsHtml}</div>
+                  </div>
+                `;
+              }
+            } catch (e) {
+              console.error("Stack render error:", e);
+            }
+          }
+
+          if (lang === 'carousel') {
+            const slides = codeText.split('<!-- slide -->');
+            const slidesHtml = slides.map((slide, index) => {
+              // Parse the inner markdown for each slide
+              // Using a fresh, simple marked configuration to avoid infinite recursive loops 
+              // with our custom renderer hook if it had another carousel inside
+              const innerHtml = marked.parse(slide.trim(), { breaks: true, gfm: true });
+              return `<div class="carousel-slide" data-index="${index}" style="display: ${index === 0 ? 'block' : 'none'};">${innerHtml}</div>`;
+            }).join('');
+            
+            const controlsHtml = slides.length > 1 ? `
+              <div class="carousel-controls">
+                <button class="carousel-btn prev" title="Previous Slide">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                </button>
+                <span class="carousel-dots">
+                  ${slides.map((_, i) => `<span class="carousel-dot ${i === 0 ? 'active' : ''}"></span>`).join('')}
+                </span>
+                <button class="carousel-btn next" title="Next Slide">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                </button>
+              </div>
+            ` : '';
+
+            return `
+              <div class="inline-widget inline-carousel">
+                <div class="carousel-slides-container">
+                  ${slidesHtml}
+                </div>
+                ${controlsHtml}
+              </div>
+            `;
+          }
+
+          const displayLang = lang || 'code';
           if (typeof hljs !== 'undefined') {
             try {
               const validLang = (lang && hljs.getLanguage(lang)) ? lang : null;
               const highlighted = validLang 
                 ? hljs.highlight(codeText, { language: validLang }).value 
                 : hljs.highlightAuto(codeText).value;
-              return `<pre><code class="hljs ${validLang ? 'language-' + validLang : ''}">${highlighted}</code></pre>`;
+              return `
+                <div class="code-block-wrapper">
+                  <div class="code-block-header">
+                    <span class="code-lang">${escapeHtml(displayLang)}</span>
+                    <button class="code-copy-btn" type="button">Copy</button>
+                  </div>
+                  <pre><code class="hljs ${validLang ? 'language-' + validLang : ''}">${highlighted}</code></pre>
+                </div>
+              `;
             } catch (e) {
               console.error("Highlight.js failed:", e);
             }
           }
 
-          return `<pre><code class="${lang ? 'language-' + lang : ''}">${escapeHtml(codeText)}</code></pre>`;
+          return `
+            <div class="code-block-wrapper">
+              <div class="code-block-header">
+                <span class="code-lang">${escapeHtml(displayLang)}</span>
+                <button class="code-copy-btn" type="button">Copy</button>
+              </div>
+              <pre><code class="${lang ? 'language-' + lang : ''}">${escapeHtml(codeText)}</code></pre>
+            </div>
+          `;
         };
 
         marked.setOptions({ breaks: true, gfm: true, renderer: renderer });
@@ -1747,6 +2094,85 @@
       console.error('Markdown error:', err);
     }
     return escapeHtml(text).replace(/\n/g, '<br>');
+  }
+
+  async function initializeInlineWidgets(container) {
+    if (!container) return;
+
+    // Initialize Mermaid
+    if (typeof mermaid !== 'undefined') {
+      try {
+        mermaid.initialize({ startOnLoad: false, theme: document.documentElement.getAttribute('data-theme') === 'light' ? 'default' : 'dark' });
+        const mermaidNodes = container.querySelectorAll('.inline-mermaid:not([data-rendered="true"])');
+        for (let i = 0; i < mermaidNodes.length; i++) {
+          const el = mermaidNodes[i];
+          el.setAttribute('data-rendered', 'true');
+          const id = 'mermaid-' + Date.now() + '-' + i + '-' + Math.floor(Math.random()*1000);
+          try {
+            const rawText = el.getAttribute('data-raw') || el.textContent;
+            const { svg } = await mermaid.render(id, rawText);
+            el.innerHTML = svg;
+          } catch (err) {
+            console.error('Mermaid render error:', err);
+            el.innerHTML = `<pre style="color:var(--text-muted); font-size:12px;">Mermaid Error: ${escapeHtml(err.message)}</pre>`;
+          }
+        }
+      } catch (e) {
+        console.error('Mermaid init error:', e);
+      }
+    }
+
+    // Initialize Chart.js
+    if (typeof Chart !== 'undefined') {
+      container.querySelectorAll('.inline-chart:not([data-rendered="true"])').forEach(canvas => {
+        canvas.setAttribute('data-rendered', 'true');
+        try {
+          const dataStr = canvas.getAttribute('data-chart');
+          const data = JSON.parse(dataStr);
+          
+          Chart.defaults.color = getComputedStyle(document.documentElement).getPropertyValue('--text-muted').trim();
+          Chart.defaults.font.family = getComputedStyle(document.documentElement).getPropertyValue('--font-body').trim();
+
+          new Chart(canvas, data);
+        } catch (e) {
+          console.error("Chart.js render error:", e);
+          const wrapper = canvas.parentElement;
+          wrapper.innerHTML = `<pre style="color:var(--text-muted); font-size:12px;">Chart Error: ${escapeHtml(e.message)}</pre>`;
+        }
+      });
+    }
+
+    // Initialize Carousels
+    container.querySelectorAll('.inline-carousel:not([data-rendered="true"])').forEach(carousel => {
+      carousel.setAttribute('data-rendered', 'true');
+      let currentSlide = 0;
+      const slides = carousel.querySelectorAll('.carousel-slide');
+      const dots = carousel.querySelectorAll('.carousel-dot');
+      const prevBtn = carousel.querySelector('.carousel-btn.prev');
+      const nextBtn = carousel.querySelector('.carousel-btn.next');
+
+      const updateSlide = () => {
+        slides.forEach((s, i) => s.style.display = i === currentSlide ? 'block' : 'none');
+        dots.forEach((d, i) => d.classList.toggle('active', i === currentSlide));
+      };
+
+      if (prevBtn) prevBtn.addEventListener('click', () => {
+        currentSlide = (currentSlide - 1 + slides.length) % slides.length;
+        updateSlide();
+      });
+
+      if (nextBtn) nextBtn.addEventListener('click', () => {
+        currentSlide = (currentSlide + 1) % slides.length;
+        updateSlide();
+      });
+      
+      dots.forEach((dot, i) => {
+        dot.addEventListener('click', () => {
+          currentSlide = i;
+          updateSlide();
+        });
+      });
+    });
   }
 
   function escapeHtml(str) { const d = document.createElement('div'); d.textContent = str || ''; return d.innerHTML; }
@@ -1794,12 +2220,12 @@
       return;
     }
     dom.workersList.innerHTML = workers.map(w => `
-      <div class="worker-item" data-id="${w.task_id}">
+      <div class="worker-item" data-id="${escapeHtml(w.task_id)}">
         <div class="worker-item-header">
-          <span class="worker-task-id">${w.task_id}</span>
-          <span class="worker-status ${w.status.toLowerCase()}">${w.status}</span>
+          <span class="worker-task-id">${escapeHtml(w.task_id)}</span>
+          <span class="worker-status ${escapeHtml(w.status.toLowerCase())}">${escapeHtml(w.status)}</span>
         </div>
-        <div class="worker-objective">${w.objective}</div>
+        <div class="worker-objective">${escapeHtml(w.objective)}</div>
       </div>
     `).join('');
 

@@ -73,14 +73,18 @@ def resolve_and_verify_path(
         ]
 
     for prefix in sensitive_prefixes:
+        is_sensitive = False
         try:
             if resolved == prefix or _is_relative_to(resolved, prefix):
-                raise PermissionError(
-                    f"CRITICAL ACCESS DENIED: Path '{target_path}' is a sensitive system directory and is permanently blocked for security."
-                )
+                is_sensitive = True
         except Exception:
             # Handle cases where path comparison might fail due to drive mismatches or other OS quirks
             continue
+            
+        if is_sensitive:
+            raise PermissionError(
+                f"CRITICAL ACCESS DENIED: Path '{target_path}' is a sensitive system directory and is permanently blocked for security."
+            )
 
     # CWD Sandboxing (Soft Block with Confirmation)
     if not _is_relative_to(resolved, cwd):

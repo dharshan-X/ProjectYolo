@@ -51,6 +51,7 @@ from tools.file_ops import (
     write_file,
 )
 from tools.identity_ops import read_user_identity, update_user_identity
+from tools.mcp_manager import list_mcp_servers
 from tools.mcp_ops import mcp_list_tools, mcp_run_tool
 from tools.memory_ops import memory_add, memory_delete, memory_list, memory_wipe
 from tools.media_ops import transcribe_audio
@@ -82,23 +83,43 @@ from tools.git_ops import (
     git_branch,
     git_stash,
 )
-from tools.gui_ops import (
-    gui_mouse_move,
-    gui_mouse_click,
-    gui_type_text,
-    gui_press_key,
-    gui_screenshot,
-    gui_get_screen_size,
-    gui_analyze_screen,
-    gui_find_element,
-    gui_click_element,
-    gui_observe_transition,
-    gui_scroll_screen,
-    gui_read_text_at,
+try:
+    from tools.gui_ops import (
+        gui_mouse_move,
+        gui_mouse_click,
+        gui_type_text,
+        gui_press_key,
+        gui_screenshot,
+        gui_send_screenshot,
+        gui_get_screen_size,
+        gui_analyze_screen,
+        gui_find_element,
+        gui_click_element,
+        gui_observe_transition,
+        gui_scroll_screen,
+        gui_read_text_at,
+    )
+    _GUI_AVAILABLE = True
+except Exception:
+    _GUI_AVAILABLE = False
+    gui_mouse_move = gui_mouse_click = gui_type_text = gui_press_key = None
+    gui_screenshot = gui_send_screenshot = gui_get_screen_size = None
+    gui_analyze_screen = gui_find_element = gui_click_element = None
+    gui_observe_transition = gui_scroll_screen = gui_read_text_at = None
+codebase_index = codebase_search = None
+from tools.team_ops import (
+    report_completion,
+    request_help,
+    spawn_worker,
+    check_workers,
+    spawn_team_discussion,
+    cancel_all_workers,
+    spawn_swarm,
+    broadcast_swarm_message,
+    read_swarm_messages,
 )
-from tools.codebase_ops import codebase_index, codebase_search
-from tools.team_ops import report_completion, request_help, spawn_worker, check_workers, spawn_team_discussion, cancel_all_workers
-from tools.plugin_manager import PLUGIN_SCHEMAS
+from tools.media_ops import generate_image
+from tools.plugin_manager import PLUGIN_HANDLERS, PLUGIN_SCHEMAS
 
 __all__ = [
     "TOOLS_SCHEMAS",
@@ -108,6 +129,9 @@ __all__ = [
     "check_workers",
     "spawn_team_discussion",
     "cancel_all_workers",
+    "spawn_swarm",
+    "broadcast_swarm_message",
+    "read_swarm_messages",
     "copy_file",
     "delete_file",
     "edit_file",
@@ -164,6 +188,7 @@ __all__ = [
     "memory_delete",
     "mcp_list_tools",
     "mcp_run_tool",
+    "list_mcp_servers",
     "learn_experience",
     "list_experiences",
     "run_background_mission",
@@ -182,6 +207,7 @@ __all__ = [
     "gui_type_text",
     "gui_press_key",
     "gui_screenshot",
+    "gui_send_screenshot",
     "gui_get_screen_size",
     "gui_analyze_screen",
     "gui_find_element",
@@ -198,6 +224,7 @@ __all__ = [
     "codebase_index",
     "codebase_search",
     "transcribe_audio",
+    "generate_image",
 ]
 
 # Define all schemas in one place for the agent
@@ -282,6 +309,57 @@ TOOLS_SCHEMAS = [
             "name": "cancel_all_workers",
             "description": "Forcefully cancel all currently running background workers. Use this if the team is stuck or producing errors.",
             "parameters": {"type": "object", "properties": {}}
+        }
+        },
+        {
+        "type": "function",
+        "function": {
+            "name": "spawn_swarm",
+            "description": "Manager tool: Create a new asynchronous Swarm to tackle a complex objective. Spawns a 'Swarm Lead' who manages sub-workers.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "objective": {"type": "string", "description": "The overall mission for the swarm."},
+                    "roles": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of specialized roles needed (e.g. ['Researcher', 'Coder', 'Reviewer'])"
+                    }
+                },
+                "required": ["objective", "roles"]
+            }
+        }
+        },
+        {
+        "type": "function",
+        "function": {
+            "name": "broadcast_swarm_message",
+            "description": "Worker tool: Broadcast a message to the shared swarm message bus.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "swarm_id": {"type": "string"},
+                    "task_id": {"type": "string"},
+                    "role": {"type": "string"},
+                    "message": {"type": "string"}
+                },
+                "required": ["swarm_id", "task_id", "role", "message"]
+            }
+        }
+        },
+        {
+        "type": "function",
+        "function": {
+            "name": "read_swarm_messages",
+            "description": "Worker tool: Read messages from the swarm's message bus.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "swarm_id": {"type": "string"},
+                    "limit": {"type": "integer"}
+                },
+                "required": ["swarm_id"]
+            }
         }
         },
         {
@@ -489,6 +567,14 @@ TOOLS_SCHEMAS = [
                 },
                 "required": ["server_command", "tool_name", "tool_args"],
             },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_mcp_servers",
+            "description": "List configured MCP servers, their connection status, and loaded tool counts.",
+            "parameters": {"type": "object", "properties": {}},
         },
     },
     {
@@ -1328,6 +1414,14 @@ TOOLS_SCHEMAS = [
     {
         "type": "function",
         "function": {
+            "name": "gui_send_screenshot",
+            "description": "Take a screenshot of the current screen and send it directly to the UI as an artifact.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "gui_get_screen_size",
             "description": "Get the screen resolution.",
             "parameters": {"type": "object", "properties": {}},
@@ -1611,6 +1705,23 @@ TOOLS_SCHEMAS = [
                 "required": ["file_path"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "generate_image",
+            "description": "Generate an image from a text prompt, save it to artifacts, and send it back to the UI.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "prompt": {
+                        "type": "string",
+                        "description": "Detailed image generation prompt."
+                    }
+                },
+                "required": ["prompt"]
+            }
+        }
     }
 ]
 
@@ -1627,3 +1738,49 @@ if not _BROWSER_AVAILABLE:
         "browser_scroll", "browser_scroll_until_end", "browser_type", "browser_wait",
     }
     TOOLS_SCHEMAS = [s for s in TOOLS_SCHEMAS if s.get("function", {}).get("name") not in _BROWSER_TOOL_NAMES]
+else:
+    _BROWSER_TOOL_NAMES = set()
+
+if not _GUI_AVAILABLE:
+    _GUI_TOOL_NAMES = {
+        "gui_mouse_move", "gui_mouse_click", "gui_type_text", "gui_press_key",
+        "gui_screenshot", "gui_send_screenshot", "gui_get_screen_size",
+        "gui_analyze_screen", "gui_find_element", "gui_click_element",
+        "gui_observe_transition", "gui_scroll_screen", "gui_read_text_at",
+    }
+    TOOLS_SCHEMAS = [
+        s for s in TOOLS_SCHEMAS
+        if s.get("function", {}).get("name") not in _GUI_TOOL_NAMES
+    ]
+else:
+    _GUI_TOOL_NAMES = set()
+
+
+def validate_tool_schema_alignment() -> dict:
+    """Return schema/handler drift so startup checks and tests can catch it."""
+    from tools.registry import TOOL_REGISTRY
+
+    lazy_tool_names = {"codebase_index", "codebase_search"}
+    schema_names = {
+        schema.get("function", {}).get("name")
+        for schema in TOOLS_SCHEMAS
+        if schema.get("function", {}).get("name")
+    }
+    handler_names = (
+        set(TOOL_REGISTRY)
+        | set(PLUGIN_HANDLERS)
+        | {"compact_conversation"}
+        | lazy_tool_names
+    )
+    handler_names -= _BROWSER_TOOL_NAMES | _GUI_TOOL_NAMES
+    return {
+        "schemas_without_handlers": sorted(schema_names - handler_names),
+        "handlers_without_schemas": sorted(handler_names - schema_names),
+    }
+
+
+_TOOL_SCHEMA_DRIFT = validate_tool_schema_alignment()
+if _TOOL_SCHEMA_DRIFT["schemas_without_handlers"] or _TOOL_SCHEMA_DRIFT["handlers_without_schemas"]:
+    from tools.base import audit_log
+
+    audit_log("tool_schema_alignment", _TOOL_SCHEMA_DRIFT, "error", "Tool schema drift detected")

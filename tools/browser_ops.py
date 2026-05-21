@@ -15,7 +15,13 @@ from tools.base import YOLO_ARTIFACTS, YOLO_BROWSER_PROFILE, audit_log
 _browser_context = None
 _browser_exit_stack = None
 _page_instance = None
-_lock = asyncio.Lock()
+_lock = None
+
+def _get_lock():
+    global _lock
+    if _lock is None:
+        _lock = asyncio.Lock()
+    return _lock
 
 # Profile path
 BROWSER_PROFILE_DIR = YOLO_BROWSER_PROFILE
@@ -102,7 +108,7 @@ async def _human_mouse_move(page, target_x, target_y):
 async def _get_page():
     """Internal helper to manage the persistent Camoufox browser context."""
     global _browser_context, _browser_exit_stack, _page_instance
-    async with _lock:
+    async with _get_lock():
         if _page_instance is None:
             launch_options = {
                 "persistent_context": True,
@@ -627,7 +633,7 @@ async def browser_wait(seconds: float) -> str:
 @register_tool()
 async def browser_close() -> str:
     global _browser_context, _browser_exit_stack, _page_instance
-    async with _lock:
+    async with _get_lock():
         if _browser_exit_stack:
             await _browser_exit_stack.aclose()
         _browser_context = _browser_exit_stack = _page_instance = None

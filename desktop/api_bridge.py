@@ -13,7 +13,11 @@ Architecture:
 """
 
 import asyncio
+import base64
+import binascii
+import hmac
 import json
+import secrets
 import os
 import sys
 from pathlib import Path
@@ -39,16 +43,105 @@ import mimetypes  # noqa: E402
 # ── Shared state (same as bot.py) ──
 TIMEOUT_MINUTES = int(os.getenv("SESSION_TIMEOUT_MINUTES", "60"))
 session_manager: SessionManager = None  # type: ignore
+BRIDGE_AUTH_DISABLED = os.getenv("DESKTOP_BRIDGE_DISABLE_AUTH", "false").lower() == "true"
+
+def get_bridge_token() -> str:
+    """Retrieve the bridge token from environment or a persistent file."""
+    # 1. Environment variable (highest priority)
+    env_token = os.getenv("DESKTOP_BRIDGE_TOKEN")
+    if env_token:
+        return env_token
+
+    # 2. Persistent file (~/.yolo/.bridge_token)
+    yolo_home = Path(os.getenv("YOLO_HOME", str(Path.home() / ".yolo"))).expanduser().resolve()
+    token_file = yolo_home / ".bridge_token"
+    
+    if token_file.exists():
+        try:
+            return token_file.read_text(encoding="utf-8").strip()
+        except Exception:
+            pass
+
+    # 3. Generate new and persist
+    new_token = secrets.token_urlsafe(32)
+    try:
+        yolo_home.mkdir(parents=True, exist_ok=True)
+        token_file.write_text(new_token, encoding="utf-8")
+        # Ensure file is only readable by the user
+        token_file.chmod(0o600)
+    except Exception as e:
+        print(f"[desktop-bridge] Warning: Could not persist bridge token: {e}")
+    
+    return new_token
+
+BRIDGE_TOKEN = get_bridge_token()
+ALLOWED_ORIGINS = {
+    "null",
+    f"http://127.0.0.1:{os.getenv('DESKTOP_BRIDGE_PORT', '8790')}",
+    f"http://localhost:{os.getenv('DESKTOP_BRIDGE_PORT', '8790')}",
+}
+ALLOWED_ORIGINS.update(
+    origin.strip()
+    for origin in os.getenv("DESKTOP_BRIDGE_ALLOWED_ORIGINS", "").split(",")
+    if origin.strip()
+)
 
 # Use the same user ID as Telegram so sessions/memories are shared.
 _allowed = os.getenv("TELEGRAM_ALLOWED_USER_IDS", "")
 DEFAULT_USER_ID = int(_allowed.split(",")[0].strip()) if _allowed.strip() else 1
+
+
+@web.middleware
+async def bridge_security_middleware(request: web.Request, handler):
+    if BRIDGE_AUTH_DISABLED:
+        return await handler(request)
+
+    if request.path.startswith(("/artifacts/", "/uploads/")):
+        return await handler(request)
+
+    origin = request.headers.get("Origin")
+    if origin and origin not in ALLOWED_ORIGINS:
+        return web.json_response({"error": "Origin not allowed"}, status=403)
+
+    token = request.headers.get("X-Yolo-Bridge-Token", "")
+    if request.path == "/health" and not token:
+        return await handler(request)
+    if not hmac.compare_digest(token, BRIDGE_TOKEN):
+        return web.json_response({"error": "Unauthorized"}, status=401)
+
+    return await handler(request)
+
 
 def get_uploads_dir() -> Path:
     from tools.base import YOLO_ARTIFACTS
     uploads_dir = Path(YOLO_ARTIFACTS) / "uploads"
     uploads_dir.mkdir(parents=True, exist_ok=True)
     return uploads_dir
+
+
+def safe_upload_filename(name: str, fallback: str = "upload.bin") -> str:
+    base = Path(str(name or fallback)).name
+    cleaned = "".join(c for c in base if c.isalnum() or c in {"-", "_", "."})
+    cleaned = cleaned.strip("._")
+    return cleaned or fallback
+
+
+def resolve_upload_path(name: str) -> Path:
+    uploads_dir = get_uploads_dir().resolve()
+    file_path = (uploads_dir / safe_upload_filename(name)).resolve(strict=False)
+    try:
+        file_path.relative_to(uploads_dir)
+    except ValueError as exc:
+        raise ValueError("Attachment path escapes uploads directory") from exc
+    return file_path
+
+
+def decode_data_url_payload(data: str) -> bytes:
+    payload = data.split(",", 1)[1] if data.startswith("data:") and "," in data else data
+    try:
+        return base64.b64decode(payload, validate=True)
+    except binascii.Error:
+        return base64.b64decode(payload)
 
 
 # ── HTTP Handlers ──
@@ -65,6 +158,7 @@ async def prepare_user_message(text: str, attachments: list) -> Any:
     
     native_vision = config.supports_vision()
     native_audio = config.supports_audio()
+    native_docs = config.supports_documents()
     
     parts = []
     if text:
@@ -73,7 +167,8 @@ async def prepare_user_message(text: str, attachments: list) -> Any:
     attachments_text = ""
 
     for att in attachments:
-        name = att.get("name", "unnamed")
+        original_name = str(att.get("name", "unnamed"))
+        name = safe_upload_filename(original_name)
         data = att.get("content", "")
         mime_type = att.get("type")
         
@@ -84,6 +179,19 @@ async def prepare_user_message(text: str, attachments: list) -> Any:
             else:
                 mime_type = mime_type or "text/plain"
 
+        # Save the file to disk so the agent can use tools on it
+        file_path = resolve_upload_path(name)
+        try:
+            if data.startswith("data:") and ";base64," in data:
+                with open(file_path, "wb") as f:
+                    f.write(decode_data_url_payload(data))
+            else:
+                with open(file_path, "w", encoding="utf-8") as f:
+                    f.write(data)
+            attachments_text += f"\n- File Attached: `{name}` (Saved to disk at `{file_path}`)\n"
+        except Exception as e:
+            attachments_text += f"\n- Error saving `{original_name}` to disk: {e}\n"
+
         if mime_type.startswith("image/"):
             if native_vision:
                 b64 = data.split(",")[1] if "," in data else data
@@ -92,7 +200,7 @@ async def prepare_user_message(text: str, attachments: list) -> Any:
                     "image_url": {"url": f"data:{mime_type};base64,{b64}"}
                 })
             else:
-                attachments_text += f"\n- Image `{name}` [Omitted: Native vision not supported by current model]\n"
+                attachments_text += f"  [Omitted Image Data: Native vision not supported by current model. Use tools to analyze `{file_path}`]\n"
         
         elif mime_type.startswith("audio/"):
             if native_audio:
@@ -102,20 +210,52 @@ async def prepare_user_message(text: str, attachments: list) -> Any:
                     "input_audio": {"data": b64, "format": mime_type.split("/")[1]}
                 })
             else:
-                attachments_text += f"\n- Audio `{name}` [Omitted: Native audio not supported by current model]\n"
+                attachments_text += f"  [Omitted Audio Data: Native audio not supported by current model. Use tools to analyze `{file_path}`]\n"
         
         else:
             # Binary or text file
+            if mime_type == "application/pdf" and native_docs:
+                b64 = data.split(",")[1] if "," in data else data
+                # Format varies by provider; using the most common structure for LiteLLM/Anthropic/Gemini
+                if config.provider == "anthropic":
+                    parts.append({
+                        "type": "document",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "application/pdf",
+                            "data": b64
+                        }
+                    })
+                else:
+                    # General multimodal part format
+                    parts.append({
+                        "type": "file",
+                        "data": b64,
+                        "mime_type": "application/pdf"
+                    })
+                attachments_text += f"  [Sent PDF natively to model for direct analysis. Use tools only if you need deeper file manipulation.]\n"
+                continue
+
+            suffix = file_path.suffix.lower()
+            if suffix in (".pdf", ".docx", ".pptx", ".xlsx", ".md"):
+                try:
+                    from tools.document_parser import extract_text_from_file
+                    parsed_text = extract_text_from_file(file_path)
+                    attachments_text += f"  Parsed Document Content:\n{parsed_text}\n"
+                except Exception as e:
+                    attachments_text += f"  [Error parsing document: {e}]\n"
+                continue
+
             if data.startswith("data:") and ";base64," in data and not mime_type.startswith("text/"):
-                attachments_text += f"\n- File `{name}` [Omitted: Binary file type {mime_type}]\n"
+                attachments_text += f"  [Omitted Binary Data: {mime_type}. Use tools (e.g. read_file, python scripts) to analyze `{file_path}`]\n"
                 continue
                 
             MAX_TEXT_ATTACHMENT = 50000 
             if len(data) > MAX_TEXT_ATTACHMENT:
                 truncated = data[:MAX_TEXT_ATTACHMENT] + "\n... [TRUNCATED] ..."
-                attachments_text += f"\n---\nFile: `{name}` (Truncated)\nContent:\n{truncated}\n"
+                attachments_text += f"  Inline Content Preview (Truncated):\n{truncated}\n"
             else:
-                attachments_text += f"\n---\nFile: `{name}`\nContent:\n{data}\n"
+                attachments_text += f"  Inline Content:\n{data}\n"
 
     if attachments_text:
         found = False
@@ -709,7 +849,11 @@ async def handle_post_mcp_servers(request: web.Request) -> web.Response:
 # ── App setup ──
 
 def create_app() -> web.Application:
-    app = web.Application()
+    # Set max payload size to 100MB to allow large file attachments
+    app = web.Application(
+        client_max_size=1024**2 * 100,
+        middlewares=[bridge_security_middleware],
+    )
     app.router.add_post("/chat", handle_chat)
     app.router.add_post("/chat/stream", handle_chat_stream)
     app.router.add_post("/confirm", handle_confirm)
@@ -792,9 +936,14 @@ def main():
     print("[desktop-bridge] Bridge ready")
     sys.stdout.flush()
 
-    web.run_app(app, host="127.0.0.1", port=port, print=None)
+    try:
+        web.run_app(app, host="127.0.0.1", port=port, print=None)
+    except OSError as e:
+        if e.errno == 98:
+            print(f"[desktop-bridge] Port {port} is already in use. Assuming bridge is already running.")
+        else:
+            raise
 
 
 if __name__ == "__main__":
     main()
-

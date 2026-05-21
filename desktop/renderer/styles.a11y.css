@@ -1,0 +1,45 @@
+/* Accessibility patch layer (focus, contrast, reduced motion)
+   Loaded after styles.css
+*/
+
+:root {
+  --focus-ring: 2px solid #3b82f6; /* visible on light + dark */
+  --focus-ring-offset: 2px;
+}
+
+/* Visible keyboard focus */
+:where(a, button, input, select, textarea, summary, [role="button"], [tabindex]:not([tabindex="-1"])):focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* Ensure icon buttons are perceivable: increase contrast */
+.input-icon-btn,
+.custom-send-btn {
+  background: #6b7280; /* darker than #A8A39D */
+  color: #ffffff;
+}
+
+.input-icon-btn:hover,
+.custom-send-btn:hover:not(:disabled) {
+  background: #4b5563;
+  color: #ffffff;
+}
+
+/* Ensure placeholder is readable */
+#message-input::placeholder {
+  color: color-mix(in srgb, var(--text-primary) 45%, transparent);
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Make hidden content not announced */
+.hidden[aria-hidden="true"] { display: none !important; }

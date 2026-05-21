@@ -40,8 +40,15 @@ def read_file(path: str, confirm_func: Optional[Callable] = None) -> str:
         resolved = resolve_and_verify_path(path, confirm_func)
         if not resolved.is_file():
             return f"Error: '{path}' is not a file."
-        content = resolved.read_text(encoding="utf-8", errors="replace")
-        content = _truncate_content(content)
+        
+        suffix = resolved.suffix.lower()
+        if suffix in (".pdf", ".docx", ".pptx", ".xlsx", ".md"):
+            from tools.document_parser import extract_text_from_file
+            content = extract_text_from_file(resolved)
+        else:
+            content = resolved.read_text(encoding="utf-8", errors="replace")
+            content = _truncate_content(content)
+        
         audit_log("read_file", {"path": path}, "success")
         return content
     except Exception as e:
@@ -53,9 +60,7 @@ def read_file(path: str, confirm_func: Optional[Callable] = None) -> str:
 def write_file(path: str, content: str, confirm_func: Optional[Callable] = None) -> str:
     try:
         resolved = resolve_and_verify_path(path, confirm_func)
-        if confirm_func and not confirm_func("write", path):
-            audit_log("write_file", {"path": path}, "denied")
-            return "Action denied by user."
+
 
         resolved.parent.mkdir(parents=True, exist_ok=True)
         resolved.write_text(content, encoding="utf-8")
@@ -75,9 +80,7 @@ def edit_file(
         if not resolved.is_file():
             return f"Error: '{path}' is not a file."
 
-        if confirm_func and not confirm_func("edit", path):
-            audit_log("edit_file", {"path": path}, "denied")
-            return "Action denied by user."
+
 
         content = resolved.read_text(encoding="utf-8")
         if old_text not in content:
@@ -85,7 +88,7 @@ def edit_file(
                 f"Error: Could not find exact text match for replacement in '{path}'."
             )
 
-        new_content = content.replace(old_text, new_text)
+        new_content = content.replace(old_text, new_text, 1)
         resolved.write_text(new_content, encoding="utf-8")
         audit_log("edit_file", {"path": path}, "success")
         return f"Successfully edited '{path}'."
@@ -101,9 +104,7 @@ def delete_file(path: str, confirm_func: Optional[Callable] = None) -> str:
         if not resolved.exists():
             return f"Error: '{path}' does not exist."
 
-        if confirm_func and not confirm_func("delete", path):
-            audit_log("delete_file", {"path": path}, "denied")
-            return "Action denied by user."
+
 
         if resolved.is_dir():
             shutil.rmtree(resolved)
@@ -125,9 +126,7 @@ def copy_file(src: str, dest: str, confirm_func: Optional[Callable] = None) -> s
         if not s_resolved.exists():
             return f"Error: Source '{src}' does not exist."
 
-        if confirm_func and not confirm_func("copy", f"{src} to {dest}"):
-            audit_log("copy_file", {"src": src, "dest": dest}, "denied")
-            return "Action denied by user."
+
 
         d_resolved.parent.mkdir(parents=True, exist_ok=True)
         if s_resolved.is_dir():
@@ -150,9 +149,7 @@ def move_file(src: str, dest: str, confirm_func: Optional[Callable] = None) -> s
         if not s_resolved.exists():
             return f"Error: Source '{src}' does not exist."
 
-        if confirm_func and not confirm_func("move", f"{src} to {dest}"):
-            audit_log("move_file", {"src": src, "dest": dest}, "denied")
-            return "Action denied by user."
+
 
         d_resolved.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(s_resolved), str(d_resolved))
@@ -231,7 +228,10 @@ def search_in_file(
             return f"Error: '{path}' is not a file."
 
         matches = []
-        regex = re.compile(pattern)
+        try:
+            regex = re.compile(pattern)
+        except re.error as e:
+            return f"Error: Invalid regex pattern '{pattern}': {e}"
         with resolved.open("r", encoding="utf-8") as f:
             for i, line in enumerate(f, 1):
                 if regex.search(line):

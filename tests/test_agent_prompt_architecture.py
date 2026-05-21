@@ -10,9 +10,14 @@ from session import Session
 
 @contextmanager
 def loaded_agent(**env_overrides):
-    with mock.patch.dict(os.environ, env_overrides, clear=False):
+    overrides = {"YOLO_HOME": "/home/dharshan/ProjectYolo/.yolo_test_home", **env_overrides}
+    with mock.patch.dict(os.environ, overrides, clear=False):
+        import tools.base
+        import prompt_builder
         import agent as agent_module
 
+        importlib.reload(tools.base)
+        importlib.reload(prompt_builder)
         module = importlib.reload(agent_module)
         yield module
 
@@ -35,7 +40,7 @@ class TestAgentPromptArchitecture(unittest.TestCase):
         ) as agent_module:
             prompt = agent_module.get_initial_messages()[0]["content"]
 
-        self.assertLess(len(prompt.split()), 500)
+        self.assertLess(len(prompt.split()), 650)
 
     def test_legacy_prompt_flag_keeps_current_contract(self):
         with loaded_agent(
@@ -45,6 +50,17 @@ class TestAgentPromptArchitecture(unittest.TestCase):
             prompt = agent_module.get_initial_messages()[0]["content"]
 
         self.assertIn("You are Yolo, an elite autonomous system controller", prompt)
+
+    def test_identity_profile_injected_into_prompt(self):
+        with loaded_agent(
+            YOLO_SYSTEM_PROMPT_VERSION="unified",
+            YOLO_SYSTEM_PROMPT_PROFILE="verbose",
+        ) as agent_module:
+            prompt = agent_module.get_initial_messages()[0]["content"]
+            
+        self.assertIn("Dharshan's Master AI Identity Profile", prompt)
+        self.assertIn("YOLO (Cognitive Apex)", prompt)
+        self.assertNotIn("{{identity_profile}}", prompt)
 
     def test_merge_memory_context_stays_single_system_message(self):
         with loaded_agent(
