@@ -22,6 +22,28 @@
     bridgePort: 8790, // Default fallback
   };
 
+  // ── History (Undo/Redo) ──
+  const fileHistory = [];
+  function saveFileState() {
+    const last = fileHistory[fileHistory.length - 1];
+    if (last && last.length === state.selectedFiles.length) {
+      const match = last.every((f, i) => f.name === state.selectedFiles[i].name);
+      if (match) return;
+    }
+    fileHistory.push([...state.selectedFiles]);
+    if (fileHistory.length > 50) fileHistory.shift();
+  }
+
+  function undoFile() {
+    if (fileHistory.length > 0) {
+      state.selectedFiles = fileHistory.pop();
+      renderAttachmentChips();
+      if (state.selectedFiles.length === 0 && !dom.input.value.trim()) {
+        dom.sendBtn.disabled = true;
+      }
+    }
+  }
+
   // ── Helpers ──
   function getFullUrl(url) {
     if (!url) return '';
@@ -186,6 +208,7 @@
       `;
       chip.querySelector('.remove-chip').addEventListener('click', (e) => {
         e.stopPropagation();
+        saveFileState();
         state.selectedFiles.splice(index, 1);
         renderAttachmentChips();
         if (state.selectedFiles.length === 0 && !dom.input.value.trim()) {
@@ -652,6 +675,7 @@
     dom.sendBtn.disabled = true;
     hideCommandPalette();
 
+    saveFileState();
     state.selectedFiles = [];
     renderAttachmentChips();
 
@@ -1059,7 +1083,7 @@
     dom.input.addEventListener('input', () => {
       dom.sendBtn.disabled = !dom.input.value.trim() && state.selectedFiles.length === 0;
       dom.input.style.height = ''; // Reset to base to calculate true scroll height
-      const newHeight = Math.min(dom.input.scrollHeight, 150);
+      const newHeight = Math.min(dom.input.scrollHeight, 80); // Stricter cap for 3 rows
       dom.input.style.height = newHeight + 'px';
       const val = dom.input.value;
       if (val.startsWith('/') && !val.includes('\n')) {
@@ -1148,6 +1172,7 @@
       }
       
       if (filesToProcess.length > 0) {
+        saveFileState();
         const newFiles = await Promise.all(filesToProcess.map(processFile));
         state.selectedFiles = [...state.selectedFiles, ...newFiles];
         renderAttachmentChips();
@@ -1178,6 +1203,7 @@
       dom.inputWrapper.classList.remove('drag-over');
       
       if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        saveFileState();
         const files = Array.from(e.dataTransfer.files);
         const newFiles = await Promise.all(files.map(processFile));
         state.selectedFiles = [...state.selectedFiles, ...newFiles];
@@ -1193,6 +1219,7 @@
 
     dom.fileUpload.addEventListener('change', async (e) => {
       if (e.target.files && e.target.files.length > 0) {
+        saveFileState();
         const files = Array.from(e.target.files);
         const newFiles = await Promise.all(files.map(processFile));
         state.selectedFiles = [...state.selectedFiles, ...newFiles];
@@ -1227,6 +1254,7 @@
       if (start) {
         try {
           const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          saveFileState();
           mediaRecorder = new MediaRecorder(stream);
           audioChunks = [];
 
@@ -1406,6 +1434,16 @@
     });
     dom.settingMode.addEventListener('change', () => {
       sendMessage(`/mode ${dom.settingMode.value}`);
+    });
+
+    // Global Undo for Files
+    window.addEventListener('keydown', (e) => {
+      if (e.ctrlKey && e.key.toLowerCase() === 'z') {
+        // Simple heuristic: if we are not typing anything in the textarea, allow file undo
+        if (document.activeElement !== dom.input || dom.input.value === '') {
+          undoFile();
+        }
+      }
     });
 
     // LLM Provider Settings

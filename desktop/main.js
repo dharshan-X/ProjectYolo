@@ -1,5 +1,5 @@
 const { app, BrowserWindow, ipcMain, dialog, Tray, Menu, Notification, globalShortcut, shell } = require('electron');
-Menu.setApplicationMenu(null);
+// Application menu will be configured per-window or hidden by default
 
 const path = require('path');
 const fs = require('fs');
@@ -138,6 +138,26 @@ function createWindow() {
     if (input.control && input.shift && input.key.toLowerCase() === 'i') {
       mainWindow.webContents.openDevTools();
       event.preventDefault();
+    }
+    if (input.control && input.key.toLowerCase() === 'z') {
+      mainWindow.webContents.undo();
+      event.preventDefault();
+    }
+    if (input.control && (input.key.toLowerCase() === 'y' || (input.shift && input.key.toLowerCase() === 'z'))) {
+      mainWindow.webContents.redo();
+      event.preventDefault();
+    }
+    if (input.control && input.key.toLowerCase() === 'c') {
+      mainWindow.webContents.copy();
+    }
+    if (input.control && input.key.toLowerCase() === 'v') {
+      mainWindow.webContents.paste();
+    }
+    if (input.control && input.key.toLowerCase() === 'x') {
+      mainWindow.webContents.cut();
+    }
+    if (input.control && input.key.toLowerCase() === 'a') {
+      mainWindow.webContents.selectAll();
     }
   });
 

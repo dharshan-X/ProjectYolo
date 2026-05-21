@@ -203,8 +203,12 @@ body {
 
 /* ── Connection Status ── */
 .status-bar {
-  top: 16px;
-  min-width: 140px;
+  top: 18px;
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+  width: max-content;
+  min-width: 160px; /* Consistent width for common messages */
   justify-content: center;
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -212,45 +216,47 @@ body {
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1) !important;
   animation: statusBarIn 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
   position: absolute;
-  top: 18px;
-  left: 50%;
-  transform: translateX(-50%);
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 12px;
+  padding: 6px 16px;
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-full);
   z-index: 20;
-  transition: opacity var(--transition);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .status-bar.hidden {
   opacity: 0;
   pointer-events: none;
+  top: 0px;
 }
 
 .status-dot {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: var(--text-muted);
   box-shadow: 0 0 8px var(--text-muted);
+  flex-shrink: 0;
 }
 
 .status-connected .status-dot {
-  background: var(--text-primary);
+  background: #10b981; /* Success green for connected */
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
 }
 
 .status-disconnected .status-dot {
-  background: var(--border);
+  background: #f43f5e; /* Danger red for disconnected */
+  box-shadow: 0 0 10px rgba(244, 63, 94, 0.4);
 }
 
 #status-text {
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-secondary);
+  white-space: nowrap;
 }
 
 /* ── Chat Header ── */
@@ -321,12 +327,15 @@ body {
 
 #chat-subtitle {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 13px;
-  font-weight: 900;
+  font-size: 10.5px;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  opacity: 1;
-  color: var(--text-primary);
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  opacity: 0.8;
+  height: 1.2em;
+  display: block;
+  min-width: 150px; /* Prevent horizontal collapsing */
 }
 
 [data-theme="dark"] #chat-subtitle {
@@ -794,7 +803,7 @@ body {
   pointer-events: auto;
   /* Re-enable pointer events for the bar */
   display: flex;
-  align-items: center;
+  align-items: flex-end; /* Anchor content to the bottom */
   gap: 8px;
   background: rgba(var(--bg-surface-rgb, 255, 255, 255), 0.85);
   backdrop-filter: blur(12px);
@@ -886,6 +895,7 @@ body {
   align-items: center;
   justify-content: center;
   transition: all var(--transition);
+  margin-bottom: 5px; 
   flex-shrink: 0;
 }
 
@@ -929,10 +939,10 @@ body {
   padding: 10px 0;
   /* Increased padding for better vertical centering */
   resize: none;
-  max-height: 200px;
+  max-height: 80px; /* Stricter cap for 3 rows */
   overflow-y: auto;
   display: flex;
-  align-items: center;
+  align-items: flex-end; /* Text grows upwards */
 }
 
 #message-input::placeholder {
@@ -945,7 +955,7 @@ body {
 
 .input-actions-right {
   display: flex;
-  align-items: center;
+  align-items: flex-end; /* Anchor to bottom */
   gap: 8px;
   flex-shrink: 0;
 }
@@ -968,6 +978,7 @@ body {
   padding: 0;
   position: relative;
   z-index: 10;
+  margin-bottom: 5px; /* Offset for flex-end alignment */
 }
 
 .custom-send-btn svg {
@@ -984,8 +995,10 @@ body {
 }
 
 .custom-send-btn:hover:not(:disabled) {
-  transform: scale(1.1) rotate(-10deg);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: translateY(-2px);
+  background-color: var(--text-primary);
+  color: var(--bg-primary);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .custom-send-btn:disabled {
@@ -1611,19 +1624,7 @@ kbd {
   letter-spacing: -0.01em;
 }
 
-#chat-subtitle {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 9.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  opacity: 0.6;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 10.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-muted);
-  opacity: 0.8;
-}
+/* chat-subtitle combined above */
 
 /* Custom scrollbar */
 ::-webkit-scrollbar {
@@ -1828,12 +1829,13 @@ body::before {
 }
 
 .input-icon-btn {
-  transition: transform 0.2s ease, color 0.2s ease;
+  transition: all var(--transition);
 }
 
 .input-icon-btn:hover {
-  transform: scale(1.1) rotate(15deg);
+  transform: translateY(-2px);
   color: var(--text-primary);
+  background: var(--bg-surface-hover);
 }
 
 .input-icon-btn:active {
@@ -1860,25 +1862,10 @@ body::before {
 /* --- Icon-only entrance animations (Staggered) --- */
 #attach-btn,
 .input-actions-right>button {
-  opacity: 0;
-  animation: textbarSlideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  opacity: 1;
 }
 
-#attach-btn {
-  animation-delay: 0.1s;
-}
-
-.input-actions-right>button:nth-child(1) {
-  animation-delay: 0.2s;
-}
-
-.input-actions-right>button:nth-child(2) {
-  animation-delay: 0.3s;
-}
-
-.input-actions-right>button:nth-child(3) {
-  animation-delay: 0.4s;
-}
+/* Entrance animation delays removed */
 
 
 /* --- Attachment Button Animations --- */
@@ -1889,7 +1876,8 @@ body::before {
 
 #attach-btn:hover {
   color: var(--text-primary);
-  background: rgba(0, 0, 0, 0.05);
+  background: var(--bg-surface-hover);
+  transform: translateY(-2px);
 }
 
 [data-theme="dark"] #attach-btn:hover {
@@ -1898,7 +1886,7 @@ body::before {
 
 #attach-btn.active {
   color: var(--text-primary);
-  transform: rotate(135deg) scale(1.2);
+  transform: rotate(45deg) scale(1.1); /* Cleaner rotation for active state */
 }
 
 #attach-btn.active svg {
@@ -2044,12 +2032,11 @@ body::before {
 @keyframes statusBarIn {
   from {
     opacity: 0;
-    transform: translate(-50%, -20px);
+    top: 0px;
   }
-
   to {
     opacity: 1;
-    transform: translate(-50%, 0);
+    top: 18px;
   }
 }
 
@@ -2275,7 +2262,7 @@ body::before {
   flex: 1;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-end; /* Expand upwards */
   min-width: 0;
   background: rgba(0, 0, 0, 0.05);
   /* Subtler inset background */
@@ -2300,6 +2287,8 @@ body::before {
 
 .attachment-chips {
   padding: 4px 0 8px;
+  max-height: 80px;
+  overflow-y: auto;
 }
 
 /* --- Voice Note Enhancements --- */
