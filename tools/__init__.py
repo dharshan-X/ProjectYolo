@@ -53,7 +53,7 @@ from tools.file_ops import (
 from tools.identity_ops import read_user_identity, update_user_identity
 from tools.mcp_manager import list_mcp_servers
 from tools.mcp_ops import mcp_list_tools, mcp_run_tool
-from tools.memory_ops import memory_add, memory_delete, memory_list, memory_wipe
+from tools.memory_ops import memory_add, memory_delete, memory_list, memory_wipe, memory_search
 from tools.media_ops import transcribe_audio
 from tools.mission_ops import create_mission, read_mission, update_mission
 from tools.research_ops import (
