@@ -232,7 +232,7 @@ def search_in_file(
             regex = re.compile(pattern)
         except re.error as e:
             return f"Error: Invalid regex pattern '{pattern}': {e}"
-        with resolved.open("r", encoding="utf-8") as f:
+        with resolved.open("r", encoding="utf-8", errors="replace") as f:
             for i, line in enumerate(f, 1):
                 if regex.search(line):
                     matches.append(f"Line {i}: {line.strip()}")

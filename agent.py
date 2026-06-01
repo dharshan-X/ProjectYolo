@@ -141,6 +141,26 @@ def _turn_state(user_msg: Optional[Any], session: Session, memory_service: Any) 
 
         if _is_gui_interaction_request(user_msg):
             _inject_system_directive(session, GUI_PERCEPTION_DIRECTIVE)
+    else:
+        # Recover state if resuming without a new user message
+        if session.message_history and session.message_history[0].get("role") == "system":
+            sys_content = session.message_history[0].get("content") or ""
+            if SELF_UPGRADE_SYSTEM_DIRECTIVE in sys_content:
+                state["self_upgrade_active"] = True
+                for i in range(len(session.message_history) - 1, -1, -1):
+                    msg = session.message_history[i]
+                    content = msg.get("content") or ""
+                    if msg.get("role") == "user" and _is_self_upgrade_request(content):
+                        state["self_upgrade_start_index"] = i
+                        break
+            if EXPERIENCE_UPDATE_SYSTEM_DIRECTIVE in sys_content:
+                state["experience_update_active"] = True
+                for i in range(len(session.message_history) - 1, -1, -1):
+                    msg = session.message_history[i]
+                    content = msg.get("content") or ""
+                    if msg.get("role") == "user" and _is_experience_update_request(content):
+                        state["experience_update_start_index"] = i
+                        break
 
     _normalize_single_system_message(session)
     return state
@@ -209,15 +229,15 @@ async def _execute_unanswered_tool_calls(
         except Exception:
             args = {}
 
+        if not isinstance(args, dict):
+            args = {}
+
         if "_invalid_json" in args:
             res = f"Error: Your tool call arguments were not valid JSON. Exception: {args.get('_error')}\nYou sent: {args.get('_invalid_json')}\nPlease fix your JSON syntax (e.g. properly escape newlines as \\n and quotes) and try again."
             _append_tool_result(
                 session, tool_call_id=tc_id, name=func_name, content=res
             )
             continue
-
-        if not isinstance(args, dict):
-            args = {}
 
         if _is_nested_background_mission(session, func_name):
             _append_tool_result(
@@ -247,32 +267,36 @@ async def _execute_unanswered_tool_calls(
             continue
 
         async def run_and_store(name=func_name, arguments=args, call_id=tc_id):
-            result = await execute_tool_direct(
-                name,
-                arguments,
-                session.user_id,
-                signal_handler,
-                session=session,
-                call_id=call_id,
-                confirmed=session.yolo_mode,
-            )
-            return {
-                "role": "tool",
-                "tool_call_id": call_id,
-                "name": name,
-                "content": result,
-            }
+            try:
+                result = await execute_tool_direct(
+                    name,
+                    arguments,
+                    session.user_id,
+                    signal_handler,
+                    session=session,
+                    call_id=call_id,
+                    confirmed=session.yolo_mode,
+                )
+                return {
+                    "role": "tool",
+                    "tool_call_id": call_id,
+                    "name": name,
+                    "content": result,
+                }
+            except Exception as e:
+                return {
+                    "role": "tool",
+                    "tool_call_id": call_id,
+                    "name": name,
+                    "content": f"Tool execution error: {e}",
+                }
 
         tasks.append(run_and_store())
 
     if tasks:
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        results = await asyncio.gather(*tasks)
         for r in results:
-            if isinstance(r, Exception):
-                # Create error tool response so history stays consistent
-                session.message_history.append({"role": "tool", "tool_call_id": "error", "content": f"Tool execution error: {r}"})
-            else:
-                session.message_history.append(r)
+            session.message_history.append(r)
         session.history_dirty = True
 
     if session.pending_confirmations:
@@ -335,6 +359,13 @@ async def _stream_llm_round(
     signal_handler: Optional[Callable],
 ) -> tuple[Optional[dict], Optional[str]]:
     max_llm_retries = 3
+    
+    active_router = router
+    if getattr(session, "llm_model", None):
+        from llm_router import LLMRouter, load_llm_config
+        config = load_llm_config()
+        config.model = session.llm_model
+        active_router = LLMRouter(config)
 
     for llm_attempt in range(max_llm_retries):
         full_content = ""
@@ -345,7 +376,7 @@ async def _stream_llm_round(
         last_stream_time = 0.0
 
         try:
-            response = await router.chat_completions(
+            response = await active_router.chat_completions(
                 messages=session.message_history,
                 tools=current_tools,
                 tool_choice="auto",
@@ -534,6 +565,18 @@ async def run_agent_turn(
     agent_iterations = 0
     while agent_iterations < max_agent_iterations:
         agent_iterations += 1
+
+        if session.pending_confirmations:
+            if signal_handler:
+                await signal_handler("__STATUS__: ")
+            first = session.pending_confirmations[0]
+            raise PendingConfirmationError(
+                first["action"],
+                first["path"],
+                first["tool_call_id"],
+                first["args"],
+            )
+
         if await _execute_unanswered_tool_calls(
             _find_unanswered_tool_calls(session), session, signal_handler
         ):

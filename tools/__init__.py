@@ -117,6 +117,7 @@ from tools.team_ops import (
     spawn_swarm,
     broadcast_swarm_message,
     read_swarm_messages,
+    wait_for_swarm_message,
 )
 from tools.media_ops import generate_image
 from tools.plugin_manager import PLUGIN_HANDLERS, PLUGIN_SCHEMAS
@@ -132,6 +133,7 @@ __all__ = [
     "spawn_swarm",
     "broadcast_swarm_message",
     "read_swarm_messages",
+    "wait_for_swarm_message",
     "copy_file",
     "delete_file",
     "edit_file",
@@ -269,7 +271,8 @@ TOOLS_SCHEMAS = [
                 "type": "object",
                 "properties": {
                     "role": {"type": "string", "description": "The persona/role (e.g. 'Database Expert', 'Frontend Dev')"},
-                    "objective": {"type": "string", "description": "Clear, detailed instructions for what the worker must accomplish."}
+                    "objective": {"type": "string", "description": "Clear, detailed instructions for what the worker must accomplish."},
+                    "model": {"type": "string", "description": "Optional model override (e.g. 'openai/gpt-4o' or 'claude-3-5-sonnet-20241022')"}
                 },
                 "required": ["role", "objective"]
             }
@@ -297,7 +300,8 @@ TOOLS_SCHEMAS = [
                         "items": {"type": "string"},
                         "description": "List of personas to invite (e.g. ['Security Expert', 'Stuck Backend Worker', 'Database Architect'])"
                     },
-                    "max_rounds": {"type": "integer", "description": "Max turns they take to debate (default 3, max 5)"}
+                    "max_rounds": {"type": "integer", "description": "Max turns they take to debate (default 3, max 5)"},
+                    "model": {"type": "string", "description": "Optional model override (e.g. 'openai/gpt-4o' or 'claude-3-5-sonnet-20241022')"}
                 },
                 "required": ["topic", "roles"]
             }
@@ -324,7 +328,8 @@ TOOLS_SCHEMAS = [
                         "type": "array",
                         "items": {"type": "string"},
                         "description": "List of specialized roles needed (e.g. ['Researcher', 'Coder', 'Reviewer'])"
-                    }
+                    },
+                    "model": {"type": "string", "description": "Optional model override (e.g. 'openai/gpt-4o' or 'claude-3-5-sonnet-20241022')"}
                 },
                 "required": ["objective", "roles"]
             }
@@ -359,6 +364,22 @@ TOOLS_SCHEMAS = [
                     "limit": {"type": "integer"}
                 },
                 "required": ["swarm_id"]
+            }
+        }
+        },
+        {
+        "type": "function",
+        "function": {
+            "name": "wait_for_swarm_message",
+            "description": "Worker tool: Pause execution and wait until a message matching a regex pattern is broadcasted to the swarm.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "swarm_id": {"type": "string"},
+                    "pattern": {"type": "string", "description": "Regex pattern to match in the broadcasted messages."},
+                    "timeout_seconds": {"type": "integer", "description": "Max seconds to wait. Defaults to 300."}
+                },
+                "required": ["swarm_id", "pattern"]
             }
         }
         },

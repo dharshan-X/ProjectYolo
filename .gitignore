@@ -41,6 +41,10 @@ node_modules
 # Installer logs
 pip-log.txt
 pip-delete-this-directory.txt
+qr.png 
+.wwebjs_auth 
+.wwebjs_cache
+.wwebjs_auth/
 
 # Unit test / coverage reports
 htmlcov/

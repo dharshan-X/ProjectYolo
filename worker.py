@@ -17,7 +17,7 @@ def get_active_workers() -> dict[str, asyncio.Task]:
     return _active_workers
 
 
-async def run_worker_loop(user_id: int, task_id: str, role: str, objective: str, memory_service: Any, swarm_id: str = None) -> None:
+async def run_worker_loop(user_id: int, task_id: str, role: str, objective: str, memory_service: Any, swarm_id: str = None, model: str = None) -> None:
     """An isolated loop for a specialized worker agent using central orchestration.
 
     Fixes applied:
@@ -42,6 +42,8 @@ async def run_worker_loop(user_id: int, task_id: str, role: str, objective: str,
     worker_session = Session(user_id=user_id)
     # Default worker to YOLO mode as it runs autonomously
     worker_session.yolo_mode = True
+    if model:
+        worker_session.llm_model = model
 
     # Specialized system prompt for the worker
     system_prompt = (

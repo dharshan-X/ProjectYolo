@@ -21,6 +21,7 @@ class Session:
     yolo_mode: bool = False
     think_mode: bool = False
     think_mode_policy: str = "auto"
+    llm_model: Optional[str] = None
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     last_active: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     # Performance: track whether history needs sanitization. Set by `mark_dirty()`

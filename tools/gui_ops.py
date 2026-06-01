@@ -52,6 +52,14 @@ except ImportError:
     ImageDraw = None  # type: ignore
     ImageFont = None  # type: ignore
 
+try:
+    import gi
+    gi.require_version("Atspi", "2.0")
+    from gi.repository import Atspi
+except (ImportError, ValueError):
+    Atspi = None
+
+
 
 # ======================================================================
 # Constants
@@ -231,10 +239,30 @@ def _take_screenshot_pil(save_path: Optional[str] = None) -> "Image.Image":
     _check_pyautogui()
     if Image is None:
         raise ImportError("Pillow is not installed. `pip install pillow`")
-    img = pyautogui.screenshot()
-    if save_path:
-        img.save(save_path)
-    return img
+    
+    try:
+        img = pyautogui.screenshot()
+        if save_path:
+            img.save(save_path)
+        return img
+    except Exception as e:
+        if os.name != "nt":
+            import tempfile
+            temp_path = save_path or os.path.join(tempfile.gettempdir(), f"screenshot_{int(time.time())}.png")
+            try:
+                subprocess.run(["scrot", temp_path], check=True)
+                img = Image.open(temp_path)
+                img.load()
+                if not save_path:
+                    try:
+                        os.remove(temp_path)
+                    except Exception:
+                        pass
+                return img
+            except Exception as scrot_err:
+                raise RuntimeError(f"Screenshot failed. PyAutoGUI error: {e}. Scrot error: {scrot_err}")
+        else:
+            raise e
 
 
 def _ocr_image(
@@ -332,6 +360,86 @@ def _ocr_image(
     # Flush last line
     _flush_line()
 
+    return elements
+
+
+def _get_atspi_elements(region: Optional[Tuple[int, int, int, int]] = None) -> List[Dict[str, Any]]:
+    """Traverse the AT-SPI2 accessibility tree to find interactive UI elements."""
+    if Atspi is None:
+        return []
+    
+    try:
+        desktop = Atspi.get_desktop(0)
+    except Exception:
+        return []
+        
+    if not desktop:
+        return []
+
+    elements = []
+    idx = 0
+
+    def traverse(node):
+        nonlocal idx
+        if not node:
+            return
+
+        try:
+            # Check defunct
+            state = node.get_state_set()
+            if state.contains(Atspi.StateType.DEFUNCT):
+                return
+                
+            # Filter for interactive or text roles
+            role = node.get_role()
+            role_name = node.get_role_name()
+            
+            # Extract basic info
+            name = node.get_name() or ""
+            
+            # We care about things we can click or read
+            interesting_roles = [
+                Atspi.Role.PUSH_BUTTON, Atspi.Role.MENU_ITEM, Atspi.Role.TEXT, 
+                Atspi.Role.ENTRY, Atspi.Role.LINK, Atspi.Role.CHECK_BOX, 
+                Atspi.Role.RADIO_BUTTON, Atspi.Role.COMBO_BOX, Atspi.Role.LABEL,
+                Atspi.Role.PAGE_TAB, Atspi.Role.TABLE_CELL
+            ]
+            
+            is_interesting = role in interesting_roles
+            has_text = bool(name.strip())
+            
+            if (is_interesting or has_text) and state.contains(Atspi.StateType.VISIBLE):
+                extents = node.get_extents(Atspi.CoordType.SCREEN)
+                x, y, w, h = extents.x, extents.y, extents.width, extents.height
+                
+                # Check region
+                if w > 0 and h > 0:
+                    in_region = True
+                    if region:
+                        rx, ry, rw, rh = region
+                        if x + w < rx or x > rx + rw or y + h < ry or y > ry + rh:
+                            in_region = False
+                            
+                    if in_region:
+                        elem_type = "button_or_menu" if role in [Atspi.Role.PUSH_BUTTON, Atspi.Role.MENU_ITEM] else ("text" if role == Atspi.Role.TEXT else role_name)
+                        display_text = name.strip() or role_name
+                        elements.append({
+                            "id": idx,
+                            "text": display_text,
+                            "type": elem_type,
+                            "bbox": [x, y, w, h],
+                            "center": [x + w // 2, y + h // 2],
+                        })
+                        idx += 1
+                        
+            # Traverse children
+            for i in range(node.get_child_count()):
+                traverse(node.get_child_at_index(i))
+                
+        except Exception:
+            pass
+            
+    traverse(desktop)
     return elements
 
 
@@ -544,8 +652,11 @@ def gui_analyze_screen(
         pil_img = _take_screenshot_pil(raw_path)
         screen_w, screen_h = pil_img.size
 
-        # OCR to detect elements
-        elements = _ocr_image(pil_img, parsed_region)  # type: ignore
+        # Try AT-SPI2 first
+        elements = _get_atspi_elements(parsed_region)
+        if not elements:
+            # Fallback to OCR to detect elements
+            elements = _ocr_image(pil_img, parsed_region)  # type: ignore
 
         # Get window list
         windows = _get_active_windows()
@@ -605,7 +716,11 @@ def gui_find_element(description: str) -> str:
         ts = _ts()
         raw_path = str(_ARTIFACTS_DIR / f"find_{ts}.png")
         pil_img = _take_screenshot_pil(raw_path)
-        elements = _ocr_image(pil_img)
+        
+        # Try AT-SPI2 first
+        elements = _get_atspi_elements()
+        if not elements:
+            elements = _ocr_image(pil_img)
 
         if not elements:
             return json.dumps(

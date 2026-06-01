@@ -192,12 +192,23 @@
     workersToggleBtn: $('#workers-toggle-btn'),
     workersPanel: $('#workers-panel'),
     closeWorkers: $('#close-workers'),
+    tabWorkers: $('#tab-workers'),
+    tabSwarms: $('#tab-swarms'),
+    workersTabContent: $('#workers-tab-content'),
+    swarmsTabContent: $('#swarms-tab-content'),
     workersListView: $('#workers-list-view'),
     workersList: $('#workers-list'),
     workerChatView: $('#worker-chat-view'),
     backToWorkers: $('#back-to-workers'),
     workerChatTitle: $('#worker-chat-title'),
     workerChatMessages: $('#worker-chat-messages'),
+    swarmsListView: $('#swarms-list-view'),
+    swarmsList: $('#swarms-list'),
+    swarmChatView: $('#swarm-chat-view'),
+    backToSwarms: $('#back-to-swarms'),
+    swarmChatTitle: $('#swarm-chat-title'),
+    swarmGraphContainer: $('#swarm-graph-container'),
+    swarmChatMessages: $('#swarm-chat-messages'),
     voiceBtn: $('#voice-btn'),
     recordingIndicator: $('#recording-indicator'),
     fileUpload: $('#file-upload'),
@@ -2422,8 +2433,9 @@
 
   init();
 
-  // ── Workers Logic ──
+  // ── Workers & Swarms Logic ──
   function pollWorkers() {
+    // Poll Background Workers
     window.yoloAPI.fetchWorkers(state.userId)
       .then(res => {
         if (res.workers) {
@@ -2441,7 +2453,7 @@
             state.workerStates[w.task_id] = w.status;
           });
 
-          if (!dom.workersPanel.classList.contains('collapsed')) {
+          if (!dom.workersPanel.classList.contains('collapsed') && dom.tabWorkers.classList.contains('active')) {
             if (state.activeWorkerId) {
               fetchWorkerSession(state.activeWorkerId).catch(e => console.error(e));
             } else {
@@ -2452,7 +2464,105 @@
       })
       .catch(e => console.error("Worker poll failed", e));
 
+    // Poll Swarms
+    window.yoloAPI.fetchSwarms(state.userId)
+      .then(res => {
+        if (res.swarms) {
+          if (!dom.workersPanel.classList.contains('collapsed') && dom.tabSwarms.classList.contains('active')) {
+            if (state.activeSwarmId) {
+              fetchSwarmMessages(state.activeSwarmId).catch(e => console.error(e));
+            } else {
+              renderSwarmsList(res.swarms);
+            }
+          }
+        }
+      })
+      .catch(e => console.error("Swarm poll failed", e));
+
     setTimeout(pollWorkers, 3000);
+  }
+
+  function renderSwarmsList(swarms) {
+    if (!swarms || swarms.length === 0) {
+      dom.swarmsList.innerHTML = '<div style="padding:20px; text-align:center; color:var(--text-muted); font-size:13px;">No active swarms</div>';
+      return;
+    }
+    dom.swarmsList.innerHTML = swarms.map(s => {
+      // Calculate overall status based on workers
+      let status = 'Running';
+      if (s.workers && s.workers.length > 0) {
+        if (s.workers.every(w => w.status === 'completed')) status = 'Completed';
+        else if (s.workers.some(w => w.status === 'failed')) status = 'Failed';
+        else if (s.workers.some(w => w.status === 'cancelled')) status = 'Cancelled';
+      }
+
+      return `
+        <div class="swarm-item" data-id="${escapeHtml(s.swarm_id)}">
+          <div class="worker-item-header">
+            <span class="swarm-id-badge">${escapeHtml(s.swarm_id)}</span>
+            <span class="worker-status ${escapeHtml(status.toLowerCase())}">${escapeHtml(status)}</span>
+          </div>
+          <div class="swarm-meta">
+            ${s.workers.length} active workers<br>
+            Last message: ${s.last_active ? formatTime(s.last_active) : 'N/A'}
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    dom.swarmsList.querySelectorAll('.swarm-item').forEach(item => {
+      item.addEventListener('click', () => {
+        state.activeSwarmId = item.dataset.id;
+        dom.swarmChatTitle.textContent = state.activeSwarmId;
+        dom.swarmsListView.classList.add('hidden');
+        dom.swarmChatView.classList.remove('hidden');
+        dom.swarmChatMessages.innerHTML = '<div style="padding:20px; text-align:center; color:var(--text-muted);">Loading swarm messages...</div>';
+        fetchSwarmMessages(state.activeSwarmId);
+      });
+    });
+  }
+
+  async function fetchSwarmMessages(swarmId) {
+    try {
+      const res = await window.yoloAPI.fetchSwarmMessages(swarmId);
+      if (res.messages) {
+        renderSwarmChat(res.messages);
+      }
+    } catch (e) {
+      console.error("Failed to fetch swarm messages", e);
+    }
+  }
+
+  function renderSwarmChat(messages) {
+    if (!messages || messages.length === 0) {
+      dom.swarmChatMessages.innerHTML = '<div style="padding:20px; text-align:center; color:var(--text-muted); font-size:13px;">No messages in this swarm yet.</div>';
+      return;
+    }
+    
+    // Sort oldest first
+    const sorted = [...messages].reverse();
+
+    dom.swarmChatMessages.innerHTML = sorted.map(m => {
+      // Create colored role badge
+      const roleColor = `hsl(${Array.from(m.sender_role).reduce((acc, char) => acc + char.charCodeAt(0), 0) % 360}, 70%, 60%)`;
+      
+      return `
+        <div class="msg user-msg" style="margin-bottom: 12px;">
+          <div class="msg-header">
+            <span style="font-weight: 600; color: ${roleColor}; font-size: 11px; text-transform: uppercase;">${escapeHtml(m.sender_role)}</span>
+            <span style="opacity: 0.6; font-size: 10px;">${formatTime(m.created_at)}</span>
+          </div>
+          <div class="msg-content" style="font-size: 13px; line-height: 1.5; padding-top: 4px;">
+            ${marked.parse(m.message)}
+          </div>
+        </div>
+      `;
+    }).join('');
+    
+    // Auto-scroll to bottom of swarm chat
+    requestAnimationFrame(() => {
+      dom.swarmChatMessages.scrollTop = dom.swarmChatMessages.scrollHeight;
+    });
   }
 
   function renderWorkersList(workers) {

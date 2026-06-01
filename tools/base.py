@@ -72,7 +72,15 @@ def resolve_and_verify_path(
             Path("/dev"),
         ]
 
-    for prefix in sensitive_prefixes:
+    resolved_prefixes = []
+    for p in sensitive_prefixes:
+        try:
+            resolved_prefixes.append(p.resolve())
+        except Exception:
+            pass
+        resolved_prefixes.append(p)
+
+    for prefix in resolved_prefixes:
         is_sensitive = False
         try:
             if resolved == prefix or _is_relative_to(resolved, prefix):

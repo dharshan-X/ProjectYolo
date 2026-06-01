@@ -28,6 +28,7 @@ class MCPManager:
         self._server_tasks: List[asyncio.Task] = []
         self.tool_schemas: List[Dict[str, Any]] = []
         self._tool_to_server: Dict[str, str] = {}
+        self._tool_to_original_name: Dict[str, str] = {}
         self._connections_initialized = False
         self._initialized = True
 
@@ -52,6 +53,7 @@ class MCPManager:
         self.load_config()
         self.tool_schemas = []
         self._tool_to_server = {}
+        self._tool_to_original_name = {}
 
         for server_name, server_info in self.servers.items():
             command = server_info.get("command")
@@ -120,6 +122,7 @@ class MCPManager:
                     }
                     self.tool_schemas.append(schema)
                     self._tool_to_server[tool_name] = server_name
+                    self._tool_to_original_name[tool_name] = t.name
 
                 audit_log("mcp_manager", {"server": server_name}, "success", "Connected and loaded tools")
                 
@@ -162,6 +165,7 @@ class MCPManager:
         self.sessions.clear()
         self.tool_schemas.clear()
         self._tool_to_server.clear()
+        self._tool_to_original_name.clear()
 
     def get_server_for_tool(self, tool_name: str) -> str:
         return self._tool_to_server.get(tool_name)
@@ -176,7 +180,8 @@ class MCPManager:
             raise ValueError(f"MCP server {server_name} is not connected")
             
         try:
-            result = await session.call_tool(tool_name, args)
+            original_name = getattr(self, "_tool_to_original_name", {}).get(tool_name, tool_name)
+            result = await session.call_tool(original_name, args)
             
             # Normalize result
             if isinstance(result.content, str):

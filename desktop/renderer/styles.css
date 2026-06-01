@@ -1668,6 +1668,100 @@ kbd {
   border-bottom: 1px solid var(--border);
 }
 
+.workers-tabs {
+  display: flex;
+  gap: 12px;
+}
+
+.worker-tab {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 0;
+  position: relative;
+  transition: color 0.2s;
+}
+
+.worker-tab:hover {
+  color: var(--text-primary);
+}
+
+.worker-tab.active {
+  color: var(--text-primary);
+}
+
+.worker-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: -17px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--text-primary);
+  border-radius: 2px 2px 0 0;
+}
+
+.tab-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  height: 100%;
+}
+
+.tab-pane.hidden {
+  display: none;
+}
+
+.swarms-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+
+.swarm-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.swarm-item:hover {
+  transform: translateY(-2px) scale(1.02);
+  border-color: var(--text-primary);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+}
+
+.swarm-item.active {
+  background: var(--bg-surface-hover);
+  border-color: var(--text-primary);
+}
+
+.swarm-id-badge {
+  background: var(--text-primary);
+  color: var(--bg-primary);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 800;
+  font-size: 10px;
+  display: inline-block;
+  align-self: flex-start;
+}
+
+.swarm-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 .workers-header h2 {
   font-size: 15px;
   font-weight: 600;

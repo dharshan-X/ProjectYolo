@@ -28,7 +28,7 @@ def request_help(task_id: str, reason: str, context: str) -> str:
 
 
 @register_tool()
-async def spawn_worker(user_id: int, role: str, objective: str, swarm_id: str = None) -> str:
+async def spawn_worker(user_id: int, role: str, objective: str, swarm_id: str = None, model: str = None) -> str:
     """Manager tool: Spawn an isolated worker agent for a specific sub-task.
 
     Bug 5 fix: Properly handles missing event loop with a fallback.
@@ -48,7 +48,7 @@ async def spawn_worker(user_id: int, role: str, objective: str, swarm_id: str = 
         def _run_in_thread():
             _loop = asyncio.new_event_loop()
             asyncio.set_event_loop(_loop)
-            _loop.run_until_complete(run_worker_loop(user_id, task_id, role, objective, get_memory(), swarm_id=swarm_id))
+            _loop.run_until_complete(run_worker_loop(user_id, task_id, role, objective, get_memory(), swarm_id=swarm_id, model=model))
             _loop.close()
 
         t = threading.Thread(target=_run_in_thread, daemon=True)
@@ -57,7 +57,7 @@ async def spawn_worker(user_id: int, role: str, objective: str, swarm_id: str = 
         return f"Worker spawned (thread fallback) with Task ID: `{task_id}`. Role: {role}. Use `check_workers()` to monitor."
 
     # Normal async path: register the task so it can be cancelled later (Bug 1 fix)
-    task = loop.create_task(run_worker_loop(user_id, task_id, role, objective, get_memory(), swarm_id=swarm_id))
+    task = loop.create_task(run_worker_loop(user_id, task_id, role, objective, get_memory(), swarm_id=swarm_id, model=model))
     _active_workers[task_id] = task
 
     audit_log("spawn_worker", {"task_id": task_id, "role": role, "swarm_id": swarm_id}, "success")
@@ -90,7 +90,7 @@ def check_workers(user_id: int, limit: int = 50) -> str:
 
 
 @register_tool()
-async def spawn_team_discussion(topic: str, roles: list[str], max_rounds: int = 5) -> str:
+async def spawn_team_discussion(topic: str, roles: list[str], max_rounds: int = 5, model: str = None) -> str:
     """Manager tool: Spawn a synchronous chat room where specialized agents debate a topic until consensus.
 
     Bug 8 fix: consensus_count is tracked across rounds, not reset each round.
@@ -129,7 +129,14 @@ async def spawn_team_discussion(topic: str, roles: list[str], max_rounds: int = 
             history.append({"role": "user", "content": prompt})
 
             try:
-                response = await router.chat_completions(
+                active_router = router
+                if model:
+                    from llm_router import LLMRouter, load_llm_config
+                    config = load_llm_config()
+                    config.model = model
+                    active_router = LLMRouter(config)
+                    
+                response = await active_router.chat_completions(
                     messages=history,
                     tools=None,  # No tools in the chat room
                     tool_choice="none",
@@ -206,7 +213,7 @@ def cancel_all_workers(user_id: int) -> str:
 
 
 @register_tool()
-async def spawn_swarm(user_id: int, objective: str, roles: list[str]) -> str:
+async def spawn_swarm(user_id: int, objective: str, roles: list[str], model: str = None) -> str:
     """Manager tool: Create a new asynchronous Swarm to tackle a complex objective.
     
     This generates a unique swarm_id and spawns a 'Swarm Lead' agent. The Lead is
@@ -220,12 +227,15 @@ async def spawn_swarm(user_id: int, objective: str, roles: list[str]) -> str:
         f"You are the Swarm Lead for Swarm ID: {swarm_id}.\n"
         f"The ultimate objective is: {objective}\n"
         f"You must use `spawn_worker(..., swarm_id='{swarm_id}')` to create the following sub-agents: {', '.join(roles)}.\n"
+        "IMPORTANT: Do not spawn all sub-agents at once if they have dependencies. Spawn them sequentially.\n"
         "Coordinate their work using `broadcast_swarm_message` and `read_swarm_messages`.\n"
+        "Use `wait_for_swarm_message` to pause your execution until a specific event or completion message occurs, "
+        "saving resources rather than repeatedly calling `read_swarm_messages`.\n"
         "Wait for them to complete their tasks, synthesize the results, and then call `report_completion`."
     )
     
     # Delegate the actual spawning to the existing spawn_worker logic
-    result = await spawn_worker(user_id, lead_role, lead_objective, swarm_id=swarm_id)
+    result = await spawn_worker(user_id, lead_role, lead_objective, swarm_id=swarm_id, model=model)
     
     audit_log("spawn_swarm", {"swarm_id": swarm_id, "roles": roles}, "success")
     return f"Swarm `{swarm_id}` created. {result}"
@@ -262,3 +272,52 @@ def read_swarm_messages(swarm_id: str, limit: int = 20) -> str:
     except Exception as e:
         logger.error(f"Failed to read swarm messages: {e}")
         return f"Error reading messages: {e}"
+
+
+@register_tool()
+async def wait_for_swarm_message(swarm_id: str, pattern: str, timeout_seconds: int = 300) -> str:
+    """Worker tool: Pause execution and wait until a message matching a regex pattern is broadcasted to the swarm.
+    
+    This is highly recommended over repeatedly polling `read_swarm_messages`.
+    """
+    import re
+    from tools.database_ops import get_swarm_messages
+    
+    audit_log("wait_for_swarm_message", {"swarm_id": swarm_id, "pattern": pattern, "timeout": timeout_seconds}, "info")
+    
+    try:
+        regex = re.compile(pattern, re.IGNORECASE)
+    except Exception as e:
+        return f"Error compiling regex pattern '{pattern}': {e}"
+        
+    start_time = asyncio.get_event_loop().time()
+    
+    # Check current messages first to see if it already happened
+    try:
+        initial_messages = get_swarm_messages(swarm_id, limit=50)
+        # Check backwards so we see newest first, but actually any match is fine.
+        for msg in initial_messages:
+            if regex.search(msg['message']):
+                return f"Match found immediately in past messages:\n[{msg['created_at']}] {msg['sender_role']}: {msg['message']}"
+    except Exception:
+        pass
+        
+    # Poll database incrementally (acting like a condition variable without needing pub/sub setup)
+    while (asyncio.get_event_loop().time() - start_time) < timeout_seconds:
+        try:
+            # We only need the very newest messages
+            recent_msgs = get_swarm_messages(swarm_id, limit=5)
+            for msg in recent_msgs:
+                # We need to make sure this message was created AFTER we started waiting.
+                # Simplest heuristic: check if any recent message matches.
+                # In a real event bus we'd use a cursor/timestamp, but string match works for YOLO mode.
+                if regex.search(msg['message']):
+                    audit_log("wait_for_swarm_message", {"swarm_id": swarm_id, "status": "matched"}, "success")
+                    return f"Match found!\n[{msg['created_at']}] {msg['sender_role']}: {msg['message']}"
+        except Exception as e:
+            logger.warning(f"Error checking messages during wait: {e}")
+            
+        await asyncio.sleep(5)  # Poll every 5 seconds
+        
+    audit_log("wait_for_swarm_message", {"swarm_id": swarm_id, "status": "timeout"}, "info")
+    return f"Timeout reached ({timeout_seconds}s) waiting for pattern '{pattern}'."
