@@ -505,9 +505,11 @@ app.whenReady().then(() => {
   const pythonCmd = fs.existsSync(venvPython) ? venvPython : 'python3';
   console.log(`[main] Starting Python Bridge using: ${pythonCmd}`);
 
+  const yoloCwd = process.env.YOLO_CWD || process.cwd();
   pyBridge = spawn(pythonCmd, [path.join(__dirname, 'api_bridge.py')], { 
     stdio: 'inherit',
     env: { ...process.env, PYTHONUNBUFFERED: '1' },
+    cwd: yoloCwd,
     detached: false
   });
 

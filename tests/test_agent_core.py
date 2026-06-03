@@ -51,3 +51,47 @@ async def test_compact_history(mock_session):
     assert mock_session.message_history[1]["role"] == "assistant"
     assert "compacted summary" in mock_session.message_history[1]["content"]
     assert len(mock_session.message_history) == 8
+
+
+@pytest.mark.anyio
+async def test_context_overflow_retry(mock_session):
+    from agent import _stream_llm_round
+    
+    mock_session.message_history = [{"role": "system", "content": "mock system"}] + [
+        {"role": "user", "content": f"msg {i}"} for i in range(11)
+    ]
+    
+    with patch("agent._compact_history", new_callable=AsyncMock) as mock_compact:
+        mock_router = MagicMock()
+        
+        class MockDelta:
+            def __init__(self, content):
+                self.content = content
+                self.reasoning_content = None
+                self.tool_calls = None
+
+        class MockChoice:
+            def __init__(self, content):
+                self.delta = MockDelta(content)
+
+        class MockChunk:
+            def __init__(self, content):
+                self.choices = [MockChoice(content)]
+
+        async def mock_generator():
+            yield MockChunk("retry success")
+
+        mock_router.chat_completions = AsyncMock(
+            side_effect=[
+                Exception("context_length_exceeded"),
+                mock_generator()
+            ]
+        )
+        
+        with patch("agent.router", mock_router):
+            res, err = await _stream_llm_round(mock_session, [], None)
+            
+            assert err is None
+            assert res["content"] == "retry success"
+            mock_compact.assert_called_once_with(mock_session, mock_router)
+

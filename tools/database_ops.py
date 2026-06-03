@@ -46,7 +46,19 @@ class _ConnContext:
     def __exit__(self, exc_type, exc, tb) -> None:
         try:
             if exc_type is None:
-                self.conn.commit()
+                # Jitter-based retry loop to handle SQLite WAL contention
+                import time, random
+                max_retries = 5
+                retry_min_s = 0.1
+                for attempt in range(max_retries):
+                    try:
+                        self.conn.commit()
+                        break
+                    except sqlite3.OperationalError as e:
+                        if "database is locked" in str(e).lower() and attempt < max_retries - 1:
+                            time.sleep(retry_min_s + random.random() * 0.2)
+                        else:
+                            raise
             else:
                 self.conn.rollback()
         finally:

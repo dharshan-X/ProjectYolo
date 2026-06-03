@@ -8,3 +8,17 @@
 {"timestamp": "2026-05-21T14:37:59.966871", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}
 {"timestamp": "2026-05-21T14:37:59.967131", "tool": "cancel_scheduled_task", "args": {"id": 1}, "status": "success", "detail": ""}
 {"timestamp": "2026-05-21T14:37:59.967394", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}
+{"timestamp": "2026-06-03T22:25:59.653972", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "hello"}
+{"timestamp": "2026-06-03T22:25:59.654575", "tool": "agent", "args": {"user_id": 1}, "status": "THINKING", "detail": "Consulting LLM..."}
+{"timestamp": "2026-06-03T22:25:59.728143", "tool": "schedule_task", "args": {"task": "Backup database", "interval": 60}, "status": "success", "detail": ""}
+{"timestamp": "2026-06-03T22:25:59.728516", "tool": "schedule_daily_task", "args": {"task": "Daily report", "interval": 1440}, "status": "success", "detail": ""}
+{"timestamp": "2026-06-03T22:25:59.729258", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}
+{"timestamp": "2026-06-03T22:25:59.730952", "tool": "cancel_scheduled_task", "args": {"id": 1}, "status": "success", "detail": ""}
+{"timestamp": "2026-06-03T22:25:59.731544", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}
+{"timestamp": "2026-06-03T22:28:13.904603", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "hello"}
+{"timestamp": "2026-06-03T22:28:13.905173", "tool": "agent", "args": {"user_id": 1}, "status": "THINKING", "detail": "Consulting LLM..."}
+{"timestamp": "2026-06-03T22:28:13.978526", "tool": "schedule_task", "args": {"task": "Backup database", "interval": 60}, "status": "success", "detail": ""}
+{"timestamp": "2026-06-03T22:28:13.979005", "tool": "schedule_daily_task", "args": {"task": "Daily report", "interval": 1440}, "status": "success", "detail": ""}
+{"timestamp": "2026-06-03T22:28:13.979466", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}
+{"timestamp": "2026-06-03T22:28:13.979720", "tool": "cancel_scheduled_task", "args": {"id": 1}, "status": "success", "detail": ""}
+{"timestamp": "2026-06-03T22:28:13.979960", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}

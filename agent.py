@@ -69,6 +69,15 @@ def reload_router():
     """Manually reload the global router (useful for tests or env changes)."""
     global router
     router = _get_router()
+
+
+def _get_active_router(session: Session) -> LLMRouter:
+    """Get the correct LLMRouter instance for the session."""
+    if getattr(session, "llm_model", None):
+        config = load_llm_config()
+        config.model = session.llm_model
+        return LLMRouter(config)
+    return router
 AUTO_COMPACT_THRESHOLD = int(os.getenv("AUTO_COMPACT_THRESHOLD", "40"))
 _LOCAL_PROMPTS_DIR = Path(__file__).resolve().parent / "configs" / "prompts"
 PROMPTS_DIR = (YOLO_HOME / "prompts") if (YOLO_HOME / "prompts").is_dir() else _LOCAL_PROMPTS_DIR
@@ -124,6 +133,16 @@ def _turn_state(user_msg: Optional[Any], session: Session, memory_service: Any) 
             memory_service, session.user_id, user_msg, all_results=all_memories
         )
         _merge_memory_context_into_system_prompt(session, memory_context)
+        
+        # Skill Discovery & Strategy Nudge
+        if getattr(session, "llm_call_count", 0) > 0 and session.llm_call_count % 15 == 0:
+            nudge_directive = (
+                "\n[System note: You have been iterating on this task for a while. "
+                "If you feel stuck or are repeating the same generic bash commands, "
+                "remember to utilize your advanced tools: delegate to subagents, "
+                "search for specialized skills, or read logs/memory comprehensively.]"
+            )
+            _inject_system_directive(session, nudge_directive)
 
         if _is_self_upgrade_request(user_msg):
             state["self_upgrade_active"] = True
@@ -359,13 +378,7 @@ async def _stream_llm_round(
     signal_handler: Optional[Callable],
 ) -> tuple[Optional[dict], Optional[str]]:
     max_llm_retries = 3
-    
-    active_router = router
-    if getattr(session, "llm_model", None):
-        from llm_router import LLMRouter, load_llm_config
-        config = load_llm_config()
-        config.model = session.llm_model
-        active_router = LLMRouter(config)
+    active_router = _get_active_router(session)
 
     for llm_attempt in range(max_llm_retries):
         full_content = ""
@@ -436,25 +449,28 @@ async def _stream_llm_round(
             }, None
 
         except Exception as e:
-            err_msg = str(e).lower()
-            retryable_patterns = [
-                "peer closed", "incomplete chunked read", "connection reset",
-                "remote protocol error", "connection closed", "readtimeout",
-                "timeout", "rate limit", "429", "500", "502", "503", "504",
-                "llm error",
-            ]
-            if any(x in err_msg for x in retryable_patterns) and llm_attempt < max_llm_retries - 1:
+            from error_classifier import classify_api_error, FailoverReason
+            classified = classify_api_error(e)
+            
+            if classified.retryable and llm_attempt < max_llm_retries - 1:
+                if classified.reason == FailoverReason.CONTEXT_OVERFLOW:
+                    log_agent(session.user_id, "SYSTEM", "Context overflow detected. Attempting to compress context...", Fore.YELLOW)
+                    # Trigger compaction and retry immediately
+                    await _compact_history(session, active_router)
+                    continue
+                    
+                delay = classified.recommended_delay * (llm_attempt + 1)
                 log_agent(
                     session.user_id,
                     "RETRY",
-                    f"LLM stream interrupted ({e}). Retrying ({llm_attempt + 1}/{max_llm_retries})...",
+                    f"LLM failover triggered ({classified.reason.value}). Retrying in {delay}s ({llm_attempt + 1}/{max_llm_retries})...",
                     Fore.YELLOW,
                 )
                 if signal_handler:
                     await signal_handler(
-                        f"__STATUS__: Connection issues, retrying ({llm_attempt + 1})..."
+                        f"__STATUS__: API issue ({classified.reason.value}), retrying ({llm_attempt + 1})..."
                     )
-                await asyncio.sleep(1.0 + llm_attempt)
+                await asyncio.sleep(delay)
                 continue
             return None, f"Error: LLM issue: {e}"
 
@@ -585,7 +601,7 @@ async def run_agent_turn(
         _normalize_single_system_message(session)
 
         if len(session.message_history) > AUTO_COMPACT_THRESHOLD:
-            await _compact_history(session, router)
+            await _compact_history(session, _get_active_router(session))
 
         log_agent(session.user_id, "THINKING", "Consulting LLM...", Fore.MAGENTA)
         if signal_handler:
