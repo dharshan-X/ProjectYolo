@@ -98,7 +98,7 @@ def _append_tool_result(
             "content": content,
         }
     )
-    session.history_dirty = True
+    session.mark_dirty()
 
 
 def _turn_state(user_msg: Optional[Any], session: Session, memory_service: Any) -> dict:
@@ -155,7 +155,7 @@ def _turn_state(user_msg: Optional[Any], session: Session, memory_service: Any) 
             state["experience_update_start_index"] = len(session.message_history)
 
         session.message_history.append({"role": "user", "content": user_msg})
-        session.history_dirty = True
+        session.mark_dirty()
         log_agent(session.user_id, "IN", user_msg, Fore.CYAN)
 
         if _is_gui_interaction_request(user_msg):
@@ -316,7 +316,7 @@ async def _execute_unanswered_tool_calls(
         results = await asyncio.gather(*tasks)
         for r in results:
             session.message_history.append(r)
-        session.history_dirty = True
+        session.mark_dirty()
 
     if session.pending_confirmations:
         if signal_handler:
@@ -582,7 +582,7 @@ def _append_assistant_round(session: Session, round_result: dict) -> bool:
         msg_dict["tool_calls"] = valid_tool_calls
 
     session.message_history.append(msg_dict)
-    session.history_dirty = True
+    session.mark_dirty()
     return bool(valid_tool_calls)
 
 
@@ -616,7 +616,7 @@ async def _finalize_or_request_more_work(
                 "If `validation_pytest` is missing, run at least one `pytest` command via `run_bash`."
             )
             session.message_history.append({"role": "user", "content": guidance})
-            session.history_dirty = True
+            session.mark_dirty()
             return None
 
     if turn_state["experience_update_active"]:
@@ -630,7 +630,7 @@ async def _finalize_or_request_more_work(
                 "Then provide confirmation that the experience was actually stored."
             )
             session.message_history.append({"role": "user", "content": guidance})
-            session.history_dirty = True
+            session.mark_dirty()
             return None
 
     if memory_service and user_msg:
@@ -777,7 +777,7 @@ async def resolve_confirmations(
                     "content": result,
                 }
             )
-    session.history_dirty = True
+    session.mark_dirty()
     
     # After resolving, run the agent turn again to process results
     return await run_agent_turn(None, session, signal_handler=signal_handler)
@@ -814,7 +814,7 @@ async def deny_confirmations(session: Session, deny_all: bool = True) -> None:
                     "content": "Action denied by user.",
                 }
             )
-    session.history_dirty = True
+    session.mark_dirty()
 
 
 def main():
