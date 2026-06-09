@@ -74,7 +74,7 @@ def test_cron_ops_wrappers():
     assert len(tasks) == 2
     cron_id_1 = tasks[0][0]
     
-    cancel_res = cancel_scheduled_task(cron_id_1)
+    cancel_res = cancel_scheduled_task(user_id, cron_id_1)
     assert f"Scheduled task `{cron_id_1}` has been cancelled" in cancel_res
     
     # Get again and verify it's gone
@@ -112,13 +112,21 @@ def test_due_crons_and_update(tmp_path, monkeypatch):
 
 def test_timezone_formatting():
     from tools.cron_ops import format_utc_to_local
+    from datetime import datetime, timezone
     
     # Test valid UTC string from SQLite standard format
     local_str = format_utc_to_local("2026-05-20 12:40:37")
-    assert local_str != "2026-05-20 12:40:37"
-    # If the system timezone is set to IST, it should be 18:10:37 IST
-    assert "18:10:37" in local_str or "+05:30" in local_str or "IST" in local_str or local_str.endswith("UTC") is False
+    expected = datetime.strptime("2026-05-20 12:40:37", "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
+    assert local_str == expected
     
+    # Test ISO format with Z
+    iso_z_str = format_utc_to_local("2026-05-20T12:40:37Z")
+    assert iso_z_str == expected
+
+    # Test naive ISO format (treated as UTC)
+    iso_naive_str = format_utc_to_local("2026-05-20T12:40:37")
+    assert iso_naive_str == expected
+
     # Test invalid / fallback
     assert format_utc_to_local("") == "Never"
     assert format_utc_to_local(None) == "Never"

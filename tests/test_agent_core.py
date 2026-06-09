@@ -95,3 +95,33 @@ async def test_context_overflow_retry(mock_session):
             assert res["content"] == "retry success"
             mock_compact.assert_called_once_with(mock_session, mock_router)
 
+
+@pytest.mark.anyio
+async def test_request_zipping(mock_session):
+    from agent import zip_history_payload
+    import os
+    
+    # Configure limits via environment
+    os.environ["REQUEST_ZIPPING"] = "true"
+    os.environ["REQUEST_ZIPPING_THRESHOLD"] = "50"
+    os.environ["REQUEST_ZIPPING_KEEP_HEAD"] = "20"
+    os.environ["REQUEST_ZIPPING_KEEP_TAIL"] = "15"
+    
+    long_content = "A" * 100
+    mock_session.message_history = [
+        {"role": "system", "content": "system prompt"},
+        {"role": "user", "content": long_content}
+    ]
+    
+    zipped = zip_history_payload(mock_session.message_history, mock_session)
+    
+    # Original message history should NOT be changed
+    assert mock_session.message_history[1]["content"] == long_content
+    
+    # Zipped content should be truncated and contain the correct prefix/suffix/marker
+    zipped_content = zipped[1]["content"]
+    assert "REQUEST ZIPPED" in zipped_content
+    assert zipped_content.startswith("A" * 20)
+    assert zipped_content.endswith("A" * 15)
+
+

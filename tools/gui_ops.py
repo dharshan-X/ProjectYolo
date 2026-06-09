@@ -27,10 +27,28 @@ Dependencies:
 
 # --------------- optional imports with graceful degradation ---------------
 try:
+    import Xlib.xauth
+    import Xlib.error
+    orig_get_best_auth = Xlib.xauth.Xauthority.get_best_auth
+    def patched_get_best_auth(self, family, address, dispno, types=(b"MIT-MAGIC-COOKIE-1",)):
+        try:
+            return orig_get_best_auth(self, family, address, dispno, types)
+        except Xlib.error.XNoAuthError:
+            if dispno != '':
+                try:
+                    return orig_get_best_auth(self, family, address, '', types)
+                except Xlib.error.XNoAuthError:
+                    pass
+            raise
+    Xlib.xauth.Xauthority.get_best_auth = patched_get_best_auth
+except Exception:
+    pass
+
+try:
     import pyautogui  # type: ignore
 
     pyautogui.FAILSAFE = False
-except ImportError:
+except Exception:
     pyautogui = None  # type: ignore
 
 try:

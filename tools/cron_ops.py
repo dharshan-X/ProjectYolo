@@ -47,7 +47,8 @@ def format_utc_to_local(utc_str: str) -> str:
         try:
             utc_dt = datetime.strptime(utc_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
         except ValueError:
-            utc_dt = datetime.fromisoformat(utc_str.replace("Z", "+00:00")).astimezone(timezone.utc)
+            dt = datetime.fromisoformat(utc_str.replace("Z", "+00:00"))
+            utc_dt = dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
         local_dt = utc_dt.astimezone()
         return local_dt.strftime("%Y-%m-%d %H:%M:%S %Z")
     except Exception:
@@ -74,15 +75,15 @@ def get_scheduled_tasks(user_id: int) -> str:
 
 
 @register_tool()
-def cancel_scheduled_task(cron_id: int) -> str:
+def cancel_scheduled_task(user_id: int, cron_id: int) -> str:
     """Permanently stop and delete a scheduled task by its ID."""
     try:
-        deleted = delete_cron(cron_id)
+        deleted = delete_cron(cron_id, user_id)
         if not deleted:
             return f"No scheduled task found for ID `{cron_id}`."
 
-        audit_log("cancel_scheduled_task", {"id": cron_id}, "success")
+        audit_log("cancel_scheduled_task", {"id": cron_id, "user_id": user_id}, "success")
         return f"Scheduled task `{cron_id}` has been cancelled."
     except Exception as e:
-        audit_log("cancel_scheduled_task", {"id": cron_id}, "error", str(e))
+        audit_log("cancel_scheduled_task", {"id": cron_id, "user_id": user_id}, "error", str(e))
         return f"Error cancelling task: {e}"

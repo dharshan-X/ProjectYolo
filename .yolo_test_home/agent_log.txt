@@ -22,3 +22,30 @@
 {"timestamp": "2026-06-03T22:28:13.979466", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}
 {"timestamp": "2026-06-03T22:28:13.979720", "tool": "cancel_scheduled_task", "args": {"id": 1}, "status": "success", "detail": ""}
 {"timestamp": "2026-06-03T22:28:13.979960", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}
+{"timestamp": "2026-06-03T22:45:45.271573", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "hello"}
+{"timestamp": "2026-06-03T22:45:45.271969", "tool": "agent", "args": {"user_id": 1}, "status": "THINKING", "detail": "Consulting LLM..."}
+{"timestamp": "2026-06-03T22:45:45.393965", "tool": "schedule_task", "args": {"task": "Backup database", "interval": 60}, "status": "success", "detail": ""}
+{"timestamp": "2026-06-03T22:45:45.394453", "tool": "schedule_daily_task", "args": {"task": "Daily report", "interval": 1440}, "status": "success", "detail": ""}
+{"timestamp": "2026-06-03T22:45:45.395333", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}
+{"timestamp": "2026-06-03T22:45:45.395821", "tool": "cancel_scheduled_task", "args": {"id": 1}, "status": "success", "detail": ""}
+{"timestamp": "2026-06-03T22:45:45.396290", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}
+{"timestamp": "2026-06-08T23:48:07.895910", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "hello"}
+{"timestamp": "2026-06-08T23:48:07.899117", "tool": "agent", "args": {"user_id": 1}, "status": "THINKING", "detail": "Consulting LLM..."}
+{"timestamp": "2026-06-08T23:48:07.974487", "tool": "schedule_task", "args": {"task": "Backup database", "interval": 60}, "status": "success", "detail": ""}
+{"timestamp": "2026-06-08T23:48:07.974958", "tool": "schedule_daily_task", "args": {"task": "Daily report", "interval": 1440}, "status": "success", "detail": ""}
+{"timestamp": "2026-06-08T23:48:07.975867", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}
+{"timestamp": "2026-06-08T23:48:07.976338", "tool": "cancel_scheduled_task", "args": {"id": 1, "user_id": 456}, "status": "success", "detail": ""}
+{"timestamp": "2026-06-08T23:48:07.976682", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}
+{"timestamp": "2026-06-08T23:48:09.686788", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "pattern": "matching message", "timeout": 1}, "status": "info", "detail": ""}
+{"timestamp": "2026-06-08T23:48:09.690770", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "pattern": "matches here", "timeout": 3}, "status": "info", "detail": ""}
+{"timestamp": "2026-06-08T23:48:10.694312", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "status": "matched"}, "status": "success", "detail": ""}
+{"timestamp": "2026-06-08T23:48:54.193063", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "hello"}
+{"timestamp": "2026-06-08T23:48:54.193719", "tool": "agent", "args": {"user_id": 1}, "status": "THINKING", "detail": "Consulting LLM..."}
+{"timestamp": "2026-06-08T23:48:54.258455", "tool": "schedule_task", "args": {"task": "Backup database", "interval": 60}, "status": "success", "detail": ""}
+{"timestamp": "2026-06-08T23:48:54.259264", "tool": "schedule_daily_task", "args": {"task": "Daily report", "interval": 1440}, "status": "success", "detail": ""}
+{"timestamp": "2026-06-08T23:48:54.260142", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}
+{"timestamp": "2026-06-08T23:48:54.261041", "tool": "cancel_scheduled_task", "args": {"id": 1, "user_id": 456}, "status": "success", "detail": ""}
+{"timestamp": "2026-06-08T23:48:54.262066", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}
+{"timestamp": "2026-06-08T23:48:55.400138", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "pattern": "matching message", "timeout": 1}, "status": "info", "detail": ""}
+{"timestamp": "2026-06-08T23:48:55.400771", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "pattern": "matches here", "timeout": 3}, "status": "info", "detail": ""}
+{"timestamp": "2026-06-08T23:48:56.409811", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "status": "matched"}, "status": "success", "detail": ""}

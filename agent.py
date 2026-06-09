@@ -372,6 +372,87 @@ def _normalize_tool_calls(tool_calls_acc: list) -> list[dict]:
     return valid_tool_calls
 
 
+def zip_history_payload(messages: list, session: Session) -> list:
+    """Compress and compact message payload to avoid LLM usage limits."""
+    zipping_enabled = os.getenv("REQUEST_ZIPPING", "true").lower() == "true"
+    if not zipping_enabled:
+        return messages
+
+    try:
+        threshold = int(os.getenv("REQUEST_ZIPPING_THRESHOLD", "4000"))
+    except ValueError:
+        threshold = 4000
+
+    try:
+        keep_head = int(os.getenv("REQUEST_ZIPPING_KEEP_HEAD", "1500"))
+    except ValueError:
+        keep_head = 1500
+
+    try:
+        keep_tail = int(os.getenv("REQUEST_ZIPPING_KEEP_TAIL", "1000"))
+    except ValueError:
+        keep_tail = 1000
+
+    zipped = []
+    for msg in messages:
+        msg_copy = dict(msg)
+        content = msg_copy.get("content")
+        role = msg_copy.get("role")
+        
+        if not content:
+            zipped.append(msg_copy)
+            continue
+
+        if isinstance(content, str):
+            if len(content) > threshold:
+                original_len = len(content)
+                msg_copy["content"] = (
+                    content[:keep_head]
+                    + f"\n\n... [REQUEST ZIPPED: Truncated {original_len - (keep_head + keep_tail)} characters to avoid usage limits] ...\n\n"
+                    + content[-keep_tail:]
+                )
+                from prompt_builder import log_agent
+                from colorama import Fore
+                log_agent(
+                    session.user_id,
+                    "ZIP",
+                    f"Zipped message content of role '{role}' ({original_len} -> {len(msg_copy['content'])} chars) to avoid usage limits.",
+                    Fore.CYAN
+                )
+        elif isinstance(content, list):
+            new_list = []
+            changed = False
+            for item in content:
+                if isinstance(item, dict) and item.get("type") == "text" and isinstance(item.get("text"), str):
+                    text = item["text"]
+                    if len(text) > threshold:
+                        original_len = len(text)
+                        zipped_text = (
+                            text[:keep_head]
+                            + f"\n\n... [REQUEST ZIPPED: Truncated {original_len - (keep_head + keep_tail)} characters to avoid usage limits] ...\n\n"
+                            + text[-keep_tail:]
+                        )
+                        item_copy = dict(item)
+                        item_copy["text"] = zipped_text
+                        new_list.append(item_copy)
+                        changed = True
+                        from prompt_builder import log_agent
+                        from colorama import Fore
+                        log_agent(
+                            session.user_id,
+                            "ZIP",
+                            f"Zipped multimodal text item of role '{role}' ({original_len} -> {len(zipped_text)} chars) to avoid usage limits.",
+                            Fore.CYAN
+                        )
+                        continue
+                new_list.append(item)
+            if changed:
+                msg_copy["content"] = new_list
+
+        zipped.append(msg_copy)
+    return zipped
+
+
 async def _stream_llm_round(
     session: Session,
     current_tools: list,
@@ -389,8 +470,9 @@ async def _stream_llm_round(
         last_stream_time = 0.0
 
         try:
+            zipped_messages = zip_history_payload(session.message_history, session)
             response = await active_router.chat_completions(
-                messages=session.message_history,
+                messages=zipped_messages,
                 tools=current_tools,
                 tool_choice="auto",
                 stream=True,

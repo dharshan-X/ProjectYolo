@@ -20,3 +20,19 @@ def test_audit_log_stderr_fallback(capsys, monkeypatch):
     
     captured = capsys.readouterr()
     assert "Failed to write audit log: Permission denied" in captured.err
+
+
+def test_gui_tools_and_schema_alignment():
+    import tools
+    assert tools._GUI_AVAILABLE is True
+    assert tools.gui_mouse_move is not None
+    assert tools.gui_screenshot is not None
+    
+    alignment = tools.validate_tool_schema_alignment()
+    assert alignment["schemas_without_handlers"] == []
+    
+    # Filter out chaos test tools registered globally during test runs
+    handlers = [h for h in alignment["handlers_without_schemas"] if not h.startswith("chaos_")]
+    assert handlers == []
+
+

@@ -34,7 +34,7 @@ async def spawn_worker(user_id: int, role: str, objective: str, swarm_id: str = 
     Bug 5 fix: Properly handles missing event loop with a fallback.
     """
     task_id = f"w_{uuid.uuid4().hex[:8]}"
-    add_worker_task(task_id, user_id, role, objective)
+    add_worker_task(task_id, user_id, role, objective, swarm_id=swarm_id)
 
     from worker import run_worker_loop, _active_workers
     from tools.memory_service import get_memory
@@ -292,13 +292,16 @@ async def wait_for_swarm_message(swarm_id: str, pattern: str, timeout_seconds: i
         
     start_time = asyncio.get_event_loop().time()
     
-    # Check current messages first to see if it already happened
+    # Track the maximum message_id before we start waiting
+    max_id = 0
     try:
-        initial_messages = get_swarm_messages(swarm_id, limit=50)
-        # Check backwards so we see newest first, but actually any match is fine.
-        for msg in initial_messages:
-            if regex.search(msg['message']):
-                return f"Match found immediately in past messages:\n[{msg['created_at']}] {msg['sender_role']}: {msg['message']}"
+        initial_messages = get_swarm_messages(swarm_id, limit=100)
+        if initial_messages:
+            max_id = max(msg.get('message_id', 0) for msg in initial_messages)
+            # Check backwards so we see newest first, but actually any match is fine.
+            for msg in reversed(initial_messages):
+                if regex.search(msg['message']):
+                    return f"Match found immediately in past messages:\n[{msg['created_at']}] {msg['sender_role']}: {msg['message']}"
     except Exception:
         pass
         
@@ -308,16 +311,24 @@ async def wait_for_swarm_message(swarm_id: str, pattern: str, timeout_seconds: i
             # We only need the very newest messages
             recent_msgs = get_swarm_messages(swarm_id, limit=5)
             for msg in recent_msgs:
-                # We need to make sure this message was created AFTER we started waiting.
-                # Simplest heuristic: check if any recent message matches.
-                # In a real event bus we'd use a cursor/timestamp, but string match works for YOLO mode.
-                if regex.search(msg['message']):
+                # Only match new messages created after we started waiting
+                if msg.get('message_id', 0) > max_id and regex.search(msg['message']):
                     audit_log("wait_for_swarm_message", {"swarm_id": swarm_id, "status": "matched"}, "success")
                     return f"Match found!\n[{msg['created_at']}] {msg['sender_role']}: {msg['message']}"
         except Exception as e:
             logger.warning(f"Error checking messages during wait: {e}")
             
-        await asyncio.sleep(5)  # Poll every 5 seconds
+        await asyncio.sleep(1)  # Poll every 1 second
+        
+    # One final check after loop exit to prevent race condition/boundary timeouts
+    try:
+        recent_msgs = get_swarm_messages(swarm_id, limit=5)
+        for msg in recent_msgs:
+            if msg.get('message_id', 0) > max_id and regex.search(msg['message']):
+                audit_log("wait_for_swarm_message", {"swarm_id": swarm_id, "status": "matched"}, "success")
+                return f"Match found!\n[{msg['created_at']}] {msg['sender_role']}: {msg['message']}"
+    except Exception:
+        pass
         
     audit_log("wait_for_swarm_message", {"swarm_id": swarm_id, "status": "timeout"}, "info")
     return f"Timeout reached ({timeout_seconds}s) waiting for pattern '{pattern}'."
