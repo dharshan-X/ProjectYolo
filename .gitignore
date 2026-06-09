@@ -225,3 +225,9 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 .worktrees/
+
+# ProjectYolo Databases
+*.db
+*.sqlite
+*.sqlite3
+*-journal

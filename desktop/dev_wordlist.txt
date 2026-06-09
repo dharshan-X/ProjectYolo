@@ -15,3 +15,7 @@ dev
 phpinfo
 robots.txt
 sitemap.xml
+.claude
+.junie
+.antigravitycli
+.*

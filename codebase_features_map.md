@@ -52,7 +52,7 @@ Enables Yolo to "see" and interact with graphical user interfaces.
 | :--- | :--- | :--- |
 | **GUI Interaction** | `tools/gui_ops.py` | Click, type, and navigate desktop GUIs via coordinate-based control. |
 | **OCR & Vision** | `bot.py`, `whisper_local.py` | Extract text from images/screenshots and transcribe audio messages. |
-| **Vision Analysis** | `test_vision.py` | Specialized logic for analyzing visual input from screenshots. |
+| **Vision Analysis** | `playground/test_vision.py` | Specialized logic for analyzing visual input from screenshots. |
 
 ---
 
