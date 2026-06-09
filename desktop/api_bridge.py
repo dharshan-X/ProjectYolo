@@ -633,7 +633,7 @@ async def handle_command(request: web.Request) -> web.Response:
                         })
                     count = len(session.pending_confirmations)
                     session.pending_confirmations = []
-                    session.history_dirty = True
+                    session.mark_dirty()
                     session_manager.save(user_id)
                     result = f"✅ {count} pending action(s) cancelled."
                 else:

@@ -529,7 +529,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "content": "Action denied by user.",
                 }
             )
-        session.history_dirty = True
+        session.mark_dirty()
         count = len(session.pending_confirmations)
         session.pending_confirmations = []
         session_manager.save(user_id)

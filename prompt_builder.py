@@ -255,7 +255,7 @@ async def _compact_history(session: Session, router: LLMRouter) -> None:
         new_history.extend(last_messages)
 
         session.message_history = new_history
-        session.history_dirty = True
+        session.mark_dirty()
         log_agent(
             session.user_id, "COMPACT", "History successfully compacted.", Fore.GREEN
         )
@@ -397,7 +397,7 @@ def _inject_system_directive(session: Session, directive: str) -> None:
     if directive not in content:
         session.message_history[0]["content"] = content + "\n\n" + directive
         # System prompt content changed; sanitize output may differ.
-        session.history_dirty = True
+        session.mark_dirty()
 
 
 def _extract_memory_lines(results: Any, limit: int = 6) -> List[str]:
@@ -547,7 +547,7 @@ def _sync_basic_facts_into_system_prompt(
     )
     if updated != content:
         session.message_history[0]["content"] = updated
-        session.history_dirty = True
+        session.mark_dirty()
 
 
 def _build_memory_context(
@@ -874,7 +874,7 @@ def _merge_memory_context_into_system_prompt(
 
     if session.message_history[0].get("role") != "system":
         session.message_history.insert(0, get_initial_messages()[0])
-        session.history_dirty = True
+        session.mark_dirty()
 
     base_content = str(session.message_history[0].get("content") or "")
     
@@ -890,7 +890,7 @@ def _merge_memory_context_into_system_prompt(
     )
     if merged != str(session.message_history[0].get("content") or ""):
         session.message_history[0]["content"] = merged
-        session.history_dirty = True
+        session.mark_dirty()
 
 
 def _normalize_single_system_message(session: Session) -> None:
@@ -951,7 +951,7 @@ def _normalize_single_system_message(session: Session) -> None:
 
     if changed:
         session.message_history = normalized
-        session.history_dirty = True
+        session.mark_dirty()
 
 
 def _extract_tool_path(args: dict) -> str:

@@ -152,7 +152,7 @@ async def repl(user_id: int, initial_prompt: Optional[str] = None) -> None:
                             "content": result
                         })
                     
-                    session.history_dirty = True
+                    session.mark_dirty()
                     session_manager.save(user_id)
                     is_resume = True # Continue the same turn
                     continue
@@ -180,7 +180,7 @@ async def repl(user_id: int, initial_prompt: Optional[str] = None) -> None:
                             "name": e.action,
                             "content": "Action denied by user."
                         })
-                    session.history_dirty = True
+                    session.mark_dirty()
                     session_manager.save(user_id)
                     is_resume = True
                     continue
