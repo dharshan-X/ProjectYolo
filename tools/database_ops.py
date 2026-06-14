@@ -46,7 +46,19 @@ class _ConnContext:
     def __exit__(self, exc_type, exc, tb) -> None:
         try:
             if exc_type is None:
-                self.conn.commit()
+                # Jitter-based retry loop to handle SQLite WAL contention
+                import time, random
+                max_retries = 5
+                retry_min_s = 0.1
+                for attempt in range(max_retries):
+                    try:
+                        self.conn.commit()
+                        break
+                    except sqlite3.OperationalError as e:
+                        if "database is locked" in str(e).lower() and attempt < max_retries - 1:
+                            time.sleep(retry_min_s + random.random() * 0.2)
+                        else:
+                            raise
             else:
                 self.conn.rollback()
         finally:
@@ -100,6 +112,7 @@ def init_db():
                 status TEXT,
                 result TEXT,
                 history TEXT,
+                swarm_id TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 notified BOOLEAN DEFAULT 0
             )
@@ -151,6 +164,10 @@ def init_db():
         if current_version < 2:
             # Table swarm_messages was added above
             cursor.execute("INSERT INTO schema_migrations (version) VALUES (2)")
+
+        if current_version < 3:
+            _ensure_column_exists(conn, "background_tasks", "swarm_id", "TEXT")
+            cursor.execute("INSERT INTO schema_migrations (version) VALUES (3)")
 
 
 def add_cron(user_id: int, task_description: str, interval_minutes: int):
@@ -208,10 +225,10 @@ def list_crons(user_id: int):
         return cursor.fetchall()
 
 
-def delete_cron(cron_id: int):
+def delete_cron(cron_id: int, user_id: int):
     with _conn_ctx() as conn:
         cursor = conn.cursor()
-        cursor.execute("UPDATE crons SET active = 0 WHERE cron_id = ?", (cron_id,))
+        cursor.execute("UPDATE crons SET active = 0 WHERE cron_id = ? AND user_id = ?", (cron_id, user_id))
         return cursor.rowcount > 0
 
 
@@ -381,12 +398,12 @@ def list_background_tasks(user_id: int, limit: int = 5):
         return cursor.fetchall()
 
 
-def add_worker_task(task_id: str, user_id: int, role: str, objective: str):
+def add_worker_task(task_id: str, user_id: int, role: str, objective: str, swarm_id: str = None):
     with _conn_ctx() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO background_tasks (task_id, user_id, objective, status) VALUES (?, ?, ?, ?)",
-            (task_id, user_id, f"[{role}] {objective}", "running"),
+            "INSERT INTO background_tasks (task_id, user_id, objective, status, swarm_id) VALUES (?, ?, ?, ?, ?)",
+            (task_id, user_id, f"[{role}] {objective}", "running", swarm_id),
         )
 
 
@@ -437,22 +454,26 @@ def get_swarm_messages(swarm_id: str, limit: int = 50) -> list[dict]:
         cursor = conn.cursor()
         cursor.execute(
             """
-            SELECT sender_task_id, sender_role, message, created_at
+            SELECT message_id, sender_task_id, sender_role, message, created_at
             FROM swarm_messages
             WHERE swarm_id = ?
-            ORDER BY created_at ASC
+            ORDER BY message_id DESC
             LIMIT ?
             """,
             (swarm_id, limit),
         )
         rows = cursor.fetchall()
         
+    # Reverse to return them in chronological order
+    rows.reverse()
+        
     return [
         {
-            "sender_task_id": r[0],
-            "sender_role": r[1],
-            "message": r[2],
-            "created_at": r[3]
+            "message_id": r[0],
+            "sender_task_id": r[1],
+            "sender_role": r[2],
+            "message": r[3],
+            "created_at": r[4]
         }
         for r in rows
     ]

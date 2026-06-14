@@ -281,6 +281,24 @@ ipcMain.handle('fetch-workers', async (_event, userId) => {
   }
 });
 
+ipcMain.handle('fetch-swarms', async (_event, userId) => {
+  try {
+    const resp = await bridgeFetch(`/swarms?user_id=${userId || 1}`, { cache: 'no-store' });
+    return await resp.json();
+  } catch {
+    return { swarms: [] };
+  }
+});
+
+ipcMain.handle('fetch-swarm-messages', async (_event, swarmId) => {
+  try {
+    const resp = await bridgeFetch(`/swarms/${swarmId}/messages`, { cache: 'no-store' });
+    return await resp.json();
+  } catch {
+    return { messages: [] };
+  }
+});
+
 ipcMain.handle('fetch-worker-session', async (_event, taskId) => {
   try {
     const resp = await bridgeFetch(`/workers/${taskId}/session`, { cache: 'no-store' });
@@ -507,9 +525,11 @@ app.whenReady().then(() => {
   const pythonCmd = fs.existsSync(venvPython) ? venvPython : 'python3';
   console.log(`[main] Starting Python Bridge using: ${pythonCmd}`);
 
+  const yoloCwd = process.env.YOLO_CWD || process.cwd();
   pyBridge = spawn(pythonCmd, [path.join(__dirname, 'api_bridge.py')], { 
     stdio: 'inherit',
     env: { ...process.env, PYTHONUNBUFFERED: '1' },
+    cwd: yoloCwd,
     detached: false
   });
 

@@ -44,13 +44,16 @@ _GLOBAL_RATE_LIMITER: Optional[RateLimiter] = None
 
 def _get_rate_limiter() -> RateLimiter:
     global _GLOBAL_RATE_LIMITER
+    try:
+        rpm = int(os.getenv("LLM_RPM_LIMIT", "40"))
+    except ValueError:
+        rpm = 40
     if _GLOBAL_RATE_LIMITER is None:
-        try:
-            rpm = int(os.getenv("LLM_RPM_LIMIT", "40"))
-        except ValueError:
-            rpm = 40
         _GLOBAL_RATE_LIMITER = RateLimiter(rpm_limit=rpm)
+    elif _GLOBAL_RATE_LIMITER.rpm_limit != rpm:
+        _GLOBAL_RATE_LIMITER.rpm_limit = rpm
     return _GLOBAL_RATE_LIMITER
+
 
 
 @dataclass

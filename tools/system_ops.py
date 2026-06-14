@@ -598,3 +598,17 @@ def run_bash_in_docker(command: str, image: str) -> str:
     except Exception as e:
         audit_log("run_bash_docker", {"command": command}, "error", str(e))
         return f"{type(e).__name__}: {e}"
+
+
+@register_tool()
+def adjust_rate_limiting(rpm_limit: int) -> str:
+    """Adjust the LLM request rate limit (requests per minute). Set to 0 to disable."""
+    try:
+        from tools.settings import update_setting
+        update_setting("LLM_RPM_LIMIT", str(rpm_limit))
+        audit_log("adjust_rate_limiting", {"rpm_limit": rpm_limit}, "success", f"Rate limit set to {rpm_limit} RPM")
+        return f"Successfully updated rate limit to {rpm_limit} requests per minute."
+    except Exception as e:
+        audit_log("adjust_rate_limiting", {"rpm_limit": rpm_limit}, "error", str(e))
+        return f"Error: {e}"
+

@@ -529,7 +529,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "content": "Action denied by user.",
                 }
             )
-        session.history_dirty = True
+        session.mark_dirty()
         count = len(session.pending_confirmations)
         session.pending_confirmations = []
         session_manager.save(user_id)
@@ -1092,17 +1092,35 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def send_long_message(
-    chat_id: int, text: str, context: ContextTypes.DEFAULT_TYPE
+    chat_id: int,
+    text: str,
+    context: ContextTypes.DEFAULT_TYPE = None,
+    bot = None,
+    parse_mode: str = ParseMode.MARKDOWN,
+    reply_markup = None,
 ):
     """Send message with automatic chunking and Markdown fallback."""
     if not text:
         text = "(No response content)"
 
+    if bot is None:
+        if context is not None:
+            bot = context.bot
+        else:
+            raise ValueError("Either context or bot must be provided to send_long_message")
+
     parts = [text[i : i + 4000] for i in range(0, len(text), 4000)]
-    for part in parts:
+    for idx, part in enumerate(parts):
+        is_last = (idx == len(parts) - 1)
+        current_reply_markup = reply_markup if is_last else None
         markdown_sent = False
         try:
-            await context.bot.send_message(chat_id, part, parse_mode=ParseMode.MARKDOWN)
+            await bot.send_message(
+                chat_id,
+                part,
+                parse_mode=parse_mode,
+                reply_markup=current_reply_markup,
+            )
             markdown_sent = True
         except telegram.error.RetryAfter as e:
             retry_after = getattr(e, "retry_after", 1)
@@ -1118,8 +1136,11 @@ async def send_long_message(
             )
             await asyncio.sleep(delay)
             try:
-                await context.bot.send_message(
-                    chat_id, part, parse_mode=ParseMode.MARKDOWN
+                await bot.send_message(
+                    chat_id,
+                    part,
+                    parse_mode=parse_mode,
+                    reply_markup=current_reply_markup,
                 )
                 markdown_sent = True
             except Exception as retry_error:
@@ -1135,7 +1156,11 @@ async def send_long_message(
         # Clean up potentially broken markdown tags before sending plain text.
         plain_text = part.replace("`", "").replace("*", "").replace("_", "")
         try:
-            await context.bot.send_message(chat_id, plain_text)
+            await bot.send_message(
+                chat_id,
+                plain_text,
+                reply_markup=current_reply_markup,
+            )
         except telegram.error.RetryAfter as e:
             retry_after = getattr(e, "retry_after", 1)
             delay = (
@@ -1150,7 +1175,11 @@ async def send_long_message(
             )
             await asyncio.sleep(delay)
             try:
-                await context.bot.send_message(chat_id, plain_text)
+                await bot.send_message(
+                    chat_id,
+                    plain_text,
+                    reply_markup=current_reply_markup,
+                )
             except Exception as retry_plain_error:
                 logger.error(f"Failed to send plain text after retry: {retry_plain_error}")
         except Exception as plain_error:
@@ -1291,17 +1320,12 @@ async def post_init(application: Application) -> None:
                                     memory_service=session_manager.memory,
                                 )
                                 msg = f"📅 *Scheduled Task Completed*\n`{escape_markdown(d)}`\n\n{escape_markdown(response)}"
-                                try:
-                                    await application.bot.send_message(
-                                        chat_id=u_id,
-                                        text=msg,
-                                        parse_mode=ParseMode.MARKDOWN_V2,
-                                    )
-                                except telegram.error.BadRequest:
-                                    plain_msg = f"📅 Scheduled Task Completed\n{d}\n\n{response}"
-                                    await application.bot.send_message(
-                                        chat_id=u_id, text=plain_msg
-                                    )
+                                await send_long_message(
+                                    chat_id=u_id,
+                                    text=msg,
+                                    bot=application.bot,
+                                    parse_mode=ParseMode.MARKDOWN_V2,
+                                )
                                 session_manager.save(u_id)
                             except agent.PendingConfirmationError as e:
                                 keyboard = [
@@ -1316,35 +1340,23 @@ async def post_init(application: Application) -> None:
                                 ]
                                 reply_markup = InlineKeyboardMarkup(keyboard)
                                 text = f"📅 *Scheduled Task Paused \\(HITL\\)*\n`{escape_markdown(d)}` needs permission:\n`{escape_markdown(e.action)}`"
-                                try:
-                                    await application.bot.send_message(
-                                        chat_id=u_id,
-                                        text=text,
-                                        reply_markup=reply_markup,
-                                        parse_mode=ParseMode.MARKDOWN_V2,
-                                    )
-                                except telegram.error.BadRequest:
-                                    plain_text = f"📅 Scheduled Task Paused (HITL)\n{d} needs permission: {e.action}"
-                                    await application.bot.send_message(
-                                        chat_id=u_id,
-                                        text=plain_text,
-                                        reply_markup=reply_markup,
-                                    )
+                                await send_long_message(
+                                    chat_id=u_id,
+                                    text=text,
+                                    bot=application.bot,
+                                    parse_mode=ParseMode.MARKDOWN_V2,
+                                    reply_markup=reply_markup,
+                                )
                                 session_manager.save(u_id)
                             except Exception as ex:
                                 logger.error(f"CRON task {c_id} failed: {ex}")
                                 msg = f"❌ *Scheduled Task Failed*\n`{escape_markdown(d)}` error: `{escape_markdown(str(ex))}`"
-                                try:
-                                    await application.bot.send_message(
-                                        chat_id=u_id,
-                                        text=msg,
-                                        parse_mode=ParseMode.MARKDOWN_V2,
-                                    )
-                                except telegram.error.BadRequest:
-                                    plain_msg = f"❌ Scheduled Task Failed\n{d} error: {str(ex)}"
-                                    await application.bot.send_message(
-                                        chat_id=u_id, text=plain_msg
-                                    )
+                                await send_long_message(
+                                    chat_id=u_id,
+                                    text=msg,
+                                    bot=application.bot,
+                                    parse_mode=ParseMode.MARKDOWN_V2,
+                                )
 
                     task_cron = asyncio.create_task(run_cron_task(cid, uid, desc, interval))
                     _background_tasks.add(task_cron)

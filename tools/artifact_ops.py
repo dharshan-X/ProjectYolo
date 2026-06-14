@@ -15,10 +15,14 @@ def create_artifact(name: str, content: str, file_type: str = "md") -> str:
         base_path = Path(ARTIFACTS_DIR)
         base_path.mkdir(exist_ok=True)
 
-        # Sanitize name and create filename
-        safe_name = name.lower().replace(" ", "_")
+        # Sanitize name and type to prevent path traversal
+        safe_name = "".join(c for c in name.lower().replace(" ", "_") if c.isalnum() or c in ("_", "-"))
+        if not safe_name: safe_name = "artifact"
+        safe_type = "".join(c for c in str(file_type) if c.isalnum())
+        if not safe_type: safe_type = "md"
+        
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"{safe_name}_{timestamp}.{file_type}"
+        filename = f"{safe_name}_{timestamp}.{safe_type}"
         file_path = base_path / filename
 
         # Write the content

@@ -1,0 +1,3 @@
+refactor: use mark_dirty() method instead of direct attribute assignment
+
+Replaces all direct assignments to `session.history_dirty = True` with the encapsulated `session.mark_dirty()` method call to properly enforce the performance semantics documented in the Session dataclass.

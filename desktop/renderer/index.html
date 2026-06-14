@@ -512,9 +512,12 @@
     <!-- ═══════════════ WORKERS PANEL ═══════════════ -->
   
     
-    <div id="workers-panel" class="workers-panel hidden">
+    <div id="workers-panel" class="workers-panel collapsed">
       <div class="workers-header">
-        <img src="assets/workers.svg" alt="Background Workers" height="24">
+        <div class="workers-tabs">
+          <button id="tab-workers" class="worker-tab active" aria-selected="true">Workers</button>
+          <button id="tab-swarms" class="worker-tab" aria-selected="false">Swarms</button>
+        </div>
         <button id="close-workers" class="icon-btn" type="button" title="Close workers" aria-label="Close workers">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
             stroke-linecap="round" stroke-linejoin="round">
@@ -524,31 +527,60 @@
         </button>
       </div>
       <div id="workers-content" class="workers-body">
-        <!-- Default list view -->
-        <div id="workers-list-view">
-          <div id="workers-list" class="workers-list"></div>
-        </div>
-        <!-- Drilldown chat view -->
-        <div id="worker-chat-view" class="hidden">
-          <div class="worker-chat-header">
-            <button id="back-to-workers" class="back-btn icon-btn">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                stroke-linecap="round" stroke-linejoin="round">
-                <line x1="19" y1="12" x2="5" y2="12"></line>
-                <polyline points="12 19 5 12 12 5"></polyline>
-              </svg>
-            </button>
-            <span class="worker-chat-title" id="worker-chat-title">Task ID</span>
+        
+        <!-- WORKERS TAB CONTENT -->
+        <div id="workers-tab-content" class="tab-pane active">
+          <!-- Default list view -->
+          <div id="workers-list-view">
+            <div id="workers-list" class="workers-list"></div>
           </div>
-          <div id="worker-chat-messages" class="messages worker-messages"></div>
+          <!-- Drilldown chat view -->
+          <div id="worker-chat-view" class="hidden">
+            <div class="worker-chat-header">
+              <button id="back-to-workers" class="back-btn icon-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="19" y1="12" x2="5" y2="12"></line>
+                  <polyline points="12 19 5 12 12 5"></polyline>
+                </svg>
+              </button>
+              <span class="worker-chat-title" id="worker-chat-title">Task ID</span>
+            </div>
+            <div id="worker-chat-messages" class="messages worker-messages"></div>
+          </div>
         </div>
+
+        <!-- SWARMS TAB CONTENT -->
+        <div id="swarms-tab-content" class="tab-pane hidden">
+          <!-- Default swarm list view -->
+          <div id="swarms-list-view">
+            <div id="swarms-list" class="swarms-list"></div>
+          </div>
+          <!-- Drilldown swarm view (Message Bus) -->
+          <div id="swarm-chat-view" class="hidden">
+            <div class="worker-chat-header">
+              <button id="back-to-swarms" class="back-btn icon-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                  stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="19" y1="12" x2="5" y2="12"></line>
+                  <polyline points="12 19 5 12 12 5"></polyline>
+                </svg>
+              </button>
+              <span class="worker-chat-title" id="swarm-chat-title">Swarm ID</span>
+            </div>
+            <!-- Interactive graph container -->
+            <div id="swarm-graph-container" style="height: 120px; border-bottom: 1px solid var(--border); background: var(--bg-tertiary);"></div>
+            <!-- Message bus -->
+            <div id="swarm-chat-messages" class="messages worker-messages"></div>
+          </div>
+        </div>
+
       </div>
     </div>
 
-    
-<script src="app.js"></script>
+
+  </div> <!-- Close #app container -->
+  
+  <script src="app.js"></script>
 </body>
-
-</html>
-
 </html>

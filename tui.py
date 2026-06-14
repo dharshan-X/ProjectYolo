@@ -1,8 +1,8 @@
 from textual.app import App, ComposeResult
-from textual.containers import Horizontal, Vertical, Grid
+from textual.containers import Horizontal, Vertical, Grid, ScrollableContainer
 from textual.widgets import Header, Footer, Static, Button, Label
 from textual.screen import ModalScreen
-from tui_widgets import ChatWidget, UserInput, WorkWidget, LogWidget
+from tui_widgets import ChatWidget, UserInput, WorkWidget, LogWidget, StopwatchWidget, TimerWidget
 import asyncio
 import agent
 from session import SessionManager
@@ -53,6 +53,8 @@ class WorkPanel(Static):
         yield Static("Operations Dashboard", id="work-title")
         yield WorkWidget(id="work-widget")
         yield LogWidget(id="log-widget")
+        yield StopwatchWidget(id="work-stopwatch")
+        yield TimerWidget(id="work-timer")
 
 def format_tool_call_for_chat(name: str, args: dict) -> str:
     if name == "read_file":

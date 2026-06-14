@@ -255,7 +255,7 @@ async def _compact_history(session: Session, router: LLMRouter) -> None:
         new_history.extend(last_messages)
 
         session.message_history = new_history
-        session.history_dirty = True
+        session.mark_dirty()
         log_agent(
             session.user_id, "COMPACT", "History successfully compacted.", Fore.GREEN
         )
@@ -318,7 +318,39 @@ EXPERIENCE_UPDATE_SYSTEM_DIRECTIVE = _load_mode_directive(
 THINK_MODE_SYSTEM_DIRECTIVE = _load_mode_directive(
     "think", LEGACY_THINK_MODE_SYSTEM_DIRECTIVE
 )
-GUI_PERCEPTION_DIRECTIVE = LEGACY_GUI_PERCEPTION_DIRECTIVE
+GUI_PERCEPTION_DIRECTIVE = _load_mode_directive(
+    "gui", LEGACY_GUI_PERCEPTION_DIRECTIVE
+)
+
+
+def _load_and_expose_all_prompts():
+    """Dynamically scan prompts directories and expose all .md files as module-level variables."""
+    dirs = []
+    if PROMPTS_DIR.is_dir():
+        dirs.append(PROMPTS_DIR)
+    user_prompts_dir = YOLO_HOME / "prompts"
+    if user_prompts_dir.is_dir() and user_prompts_dir.resolve() not in [d.resolve() for d in dirs]:
+        dirs.append(user_prompts_dir)
+        
+    for d in dirs:
+        try:
+            for path in d.glob("*.md"):
+                name = path.stem
+                # Convert template name to a Python variable name (uppercase, underscores instead of hyphens)
+                var_name = name.upper().replace("-", "_")
+                # Avoid overriding core system functions or variables
+                if var_name in globals() and var_name in ("Session", "Path", "VERBOSE", "PROMPTS_DIR"):
+                    continue
+                try:
+                    content = path.read_text(encoding="utf-8").strip()
+                    if content:
+                        globals()[var_name] = content
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+_load_and_expose_all_prompts()
 
 
 def _matches_intent(msg: str, triggers: list, negations: list = None) -> bool:
@@ -397,7 +429,7 @@ def _inject_system_directive(session: Session, directive: str) -> None:
     if directive not in content:
         session.message_history[0]["content"] = content + "\n\n" + directive
         # System prompt content changed; sanitize output may differ.
-        session.history_dirty = True
+        session.mark_dirty()
 
 
 def _extract_memory_lines(results: Any, limit: int = 6) -> List[str]:
@@ -547,7 +579,7 @@ def _sync_basic_facts_into_system_prompt(
     )
     if updated != content:
         session.message_history[0]["content"] = updated
-        session.history_dirty = True
+        session.mark_dirty()
 
 
 def _build_memory_context(
@@ -874,7 +906,7 @@ def _merge_memory_context_into_system_prompt(
 
     if session.message_history[0].get("role") != "system":
         session.message_history.insert(0, get_initial_messages()[0])
-        session.history_dirty = True
+        session.mark_dirty()
 
     base_content = str(session.message_history[0].get("content") or "")
     
@@ -890,7 +922,7 @@ def _merge_memory_context_into_system_prompt(
     )
     if merged != str(session.message_history[0].get("content") or ""):
         session.message_history[0]["content"] = merged
-        session.history_dirty = True
+        session.mark_dirty()
 
 
 def _normalize_single_system_message(session: Session) -> None:
@@ -951,7 +983,7 @@ def _normalize_single_system_message(session: Session) -> None:
 
     if changed:
         session.message_history = normalized
-        session.history_dirty = True
+        session.mark_dirty()
 
 
 def _extract_tool_path(args: dict) -> str:

@@ -20,6 +20,23 @@ async def _run_sync_callable(func: Callable, kwargs: dict) -> Any:
     threading.Thread(target=runner, daemon=True).start()
     return await future
 
+def get_worker_details(task_id: str) -> dict:
+    from tools.database_ops import _conn_ctx
+    try:
+        with _conn_ctx() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT objective, swarm_id FROM background_tasks WHERE task_id = ?", (task_id,))
+            row = cursor.fetchone()
+            if row:
+                objective, swarm_id = row
+                role = ""
+                if objective and objective.startswith("[") and "]" in objective:
+                    role = objective[1:objective.find("]")]
+                return {"role": role, "swarm_id": swarm_id}
+    except Exception:
+        pass
+    return {"role": "", "swarm_id": None}
+
 async def execute_tool_direct(
     func_name: str,
     func_args: Any,
@@ -111,6 +128,17 @@ async def execute_tool_direct(
                 func_args["router"] = getattr(_agent_mod, "router", None)
             if "confirm_func" in sig.parameters and "confirm_func" not in func_args:
                 func_args["confirm_func"] = lambda _action, _target: bool(confirmed)
+
+            # Swarm Context Injection
+            if func_name in {"broadcast_swarm_message", "read_swarm_messages", "wait_for_swarm_message"}:
+                if session and session.task_id:
+                    details = get_worker_details(session.task_id)
+                    if details["swarm_id"]:
+                        func_args["swarm_id"] = details["swarm_id"]
+                    if "task_id" in sig.parameters:
+                        func_args["task_id"] = session.task_id
+                    if "role" in sig.parameters and details["role"]:
+                        func_args["role"] = details["role"]
 
             # Special-case injections for complex background task runners
             if func_name == "run_background_mission" and "mission_coro" in sig.parameters:

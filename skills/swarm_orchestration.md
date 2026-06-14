@@ -21,7 +21,12 @@ While the `spawn_worker` tool is useful for isolated tasks, `spawn_swarm` allows
 3. **`read_swarm_messages(swarm_id: str, limit: int)`**
    - **User:** Swarm Workers
    - **Purpose:** Read the recent messages posted by other members of the swarm.
-   - **Usage:** Call this periodically to stay synced. If you are waiting on another agent (e.g., waiting for the Backend Dev to finish an API), read the bus to see if they've broadcasted completion.
+   - **Usage:** Call this periodically to stay synced. If you are waiting on another agent, it is highly recommended to use `wait_for_swarm_message` instead.
+
+4. **`wait_for_swarm_message(swarm_id: str, pattern: str, timeout_seconds: int)`**
+   - **User:** Swarm Workers
+   - **Purpose:** Pause execution until a message matching a regex pattern is broadcasted to the swarm.
+   - **Usage:** Use this to pause your workflow without consuming turns. For example, `wait_for_swarm_message(swarm_id, "Backend API complete")`.
 
 ## How to Orchestrate a Swarm
 
@@ -33,25 +38,28 @@ When the user gives a complex task requiring multiple domains of expertise:
 
 ### 2. Swarm Lead Responsibilities
 If you are spawned as a "Swarm Lead", your specific instructions are to:
-1. Use `spawn_worker(..., swarm_id=...)` to create the sub-agents specified in your objective.
-2. Coordinate their work. Read the message bus frequently.
-3. If a sub-agent gets stuck, you can provide guidance via the message bus or spawn a new agent to help them.
-4. Once all sub-agents have completed their objectives and you have synthesized the final result, call `report_completion`.
+1. **Plan Dependencies:** Do NOT spawn all workers simultaneously if they have dependencies.
+2. **Execute Sequentially:** Use `spawn_worker(..., swarm_id=...)` to create the first agent. Then use `wait_for_swarm_message` to wait for them to broadcast completion before spawning the next agent.
+3. Coordinate their work. 
+4. If a sub-agent gets stuck, you can provide guidance via the message bus or spawn a new agent to help them.
+5. Once all sub-agents have completed their objectives and you have synthesized the final result, call `report_completion`.
 
 ### 3. Sub-Agent Responsibilities
 If you are spawned as a sub-agent within a Swarm:
 1. You have a specific objective (e.g., "Write the tests").
-2. Check `read_swarm_messages` to see what your teammates have done.
-3. Once your code is written, use `broadcast_swarm_message` to tell the QA or Lead agent that your work is ready for review.
+2. Check `read_swarm_messages` to see what your teammates have done, or use `wait_for_swarm_message` if you are blocked.
+3. Once your code is written, use `broadcast_swarm_message` to tell the QA or Lead agent that your work is ready for review. Include a clear, easily matchable phrase like "[TASK COMPLETE]".
 4. When your specific sub-task is totally complete and approved by the Lead, call `report_completion`.
 
 ## Example Workflow
 
 **User:** "Build a full-stack to-do app in the `todo_app` directory."
 **Primary Agent:** Calls `spawn_swarm` with roles `["React Dev", "FastAPI Dev", "QA Engineer"]`.
-**Swarm Lead:** Spawns the three workers.
-**FastAPI Dev:** Writes the backend, tests it, then calls `broadcast_swarm_message` saying "Backend is running on port 8000, API docs are at /docs". Then calls `report_completion`.
-**React Dev:** Calls `read_swarm_messages`, sees the backend is ready, builds the frontend to connect to port 8000. Broadcasts "Frontend is done".
-**QA Engineer:** Sees the messages, runs end-to-end browser tests, finds a bug, broadcasts the bug back to the React Dev.
-**React Dev:** Fixes the bug, broadcasts "Fixed".
+**Swarm Lead:** Spawns "FastAPI Dev". Waits for message matching `API COMPLETE`.
+**FastAPI Dev:** Writes the backend, tests it, then calls `broadcast_swarm_message` saying "[API COMPLETE] Backend is running". Then calls `report_completion`.
+**Swarm Lead:** Sees match, then spawns "React Dev".
+**React Dev:** Builds the frontend to connect to the backend. Broadcasts "[FRONTEND COMPLETE]".
+**Swarm Lead:** Sees match, spawns "QA Engineer".
+**QA Engineer:** Runs end-to-end tests. Finds bug, broadcasts to React Dev.
+**React Dev:** Fixes bug, broadcasts "[FRONTEND COMPLETE]".
 **Swarm Lead:** Synthesizes the final state, calls `report_completion` to tell the Primary Agent that the entire swarm has finished successfully.

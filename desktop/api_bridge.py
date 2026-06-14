@@ -633,7 +633,7 @@ async def handle_command(request: web.Request) -> web.Response:
                         })
                     count = len(session.pending_confirmations)
                     session.pending_confirmations = []
-                    session.history_dirty = True
+                    session.mark_dirty()
                     session_manager.save(user_id)
                     result = f"✅ {count} pending action(s) cancelled."
                 else:
@@ -706,6 +706,55 @@ async def handle_get_workers(request: web.Request) -> web.Response:
             "created_at": str(t[3])
         })
     return web.json_response({"workers": result})
+
+
+async def handle_get_swarms(request: web.Request) -> web.Response:
+    """GET /swarms?user_id=N — Get unique swarms and their lead tasks."""
+    from tools.database_ops import _conn_ctx
+    user_id = int(request.query.get("user_id", DEFAULT_USER_ID))
+    
+    with _conn_ctx() as conn:
+        cursor = conn.cursor()
+        # Find all swarm_ids mentioned in objective or messages
+        cursor.execute("SELECT DISTINCT swarm_id FROM swarm_messages")
+        swarm_rows = cursor.fetchall()
+        
+        swarms = []
+        for r in swarm_rows:
+            swarm_id = r[0]
+            # Get latest message for summary
+            cursor.execute("SELECT created_at FROM swarm_messages WHERE swarm_id = ? ORDER BY created_at DESC LIMIT 1", (swarm_id,))
+            last_msg = cursor.fetchone()
+            
+            # Find workers associated with this swarm
+            cursor.execute("SELECT task_id, objective, status FROM background_tasks WHERE objective LIKE ?", (f"%{swarm_id}%",))
+            # Extract role from the objective if possible (e.g. "[Lead Developer] ...")
+            workers = []
+            for w in cursor.fetchall():
+                task_id, objective, status = w[0], w[1], w[2]
+                role = "Worker"
+                if objective.startswith("[") and "]" in objective:
+                    role = objective[1:objective.find("]")]
+                workers.append({"task_id": task_id, "role": role, "status": status})
+            
+            swarms.append({
+                "swarm_id": swarm_id,
+                "last_active": str(last_msg[0]) if last_msg else None,
+                "workers": workers
+            })
+            
+    return web.json_response({"swarms": swarms})
+
+
+async def handle_get_swarm_messages(request: web.Request) -> web.Response:
+    """GET /swarms/{swarm_id}/messages"""
+    from tools.database_ops import get_swarm_messages
+    swarm_id = request.match_info.get("swarm_id")
+    if not swarm_id:
+        return web.json_response({"error": "Missing swarm_id"}, status=400)
+    
+    messages = get_swarm_messages(swarm_id, limit=100)
+    return web.json_response({"messages": messages})
 
 
 async def handle_get_worker_session(request: web.Request) -> web.Response:
@@ -798,7 +847,7 @@ async def handle_update_env(request: web.Request) -> web.Response:
             "OPENAI_API_KEY", "OPENAI_BASE_URL", 
             "ANTHROPIC_API_KEY", "ANTHROPIC_MODEL", "ANTHROPIC_BASE_URL",
             "OPENROUTER_API_KEY", "OPENROUTER_MODEL", "OPENROUTER_BASE_URL",
-            "LLM_API_KEY", "LLM_BASE_URL"
+            "LLM_API_KEY", "LLM_BASE_URL", "LLM_RPM_LIMIT"
         }
         
         for k, v in data.items():
@@ -866,6 +915,8 @@ def create_app() -> web.Application:
     app.router.add_get("/session", handle_session_info)
     app.router.add_get("/sessions", handle_get_sessions)
     app.router.add_get("/workers", handle_get_workers)
+    app.router.add_get("/swarms", handle_get_swarms)
+    app.router.add_get("/swarms/{swarm_id}/messages", handle_get_swarm_messages)
     app.router.add_get("/workers/{task_id}/session", handle_get_worker_session)
     
     # Serve static files from artifacts/uploads
@@ -890,6 +941,63 @@ def init_session_manager(shared_manager: SessionManager = None):
     elif session_manager is None:
         session_manager = SessionManager(timeout_minutes=TIMEOUT_MINUTES)
     return session_manager
+
+
+async def run_desktop_bridge(
+    host: str = "127.0.0.1",
+    port: int = 0,
+    shared_session_manager: SessionManager = None,
+) -> None:
+    """Start the desktop bridge as an async task (called from server.py).
+
+    This runs forever alongside Telegram/Discord gateways.
+    """
+    if port == 0:
+        port = int(os.getenv("DESKTOP_BRIDGE_PORT", "8790"))
+
+    init_session_manager(shared_session_manager)
+    app = create_app()
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, host, port)
+    await site.start()
+
+    print(f"[desktop-bridge] Listening on http://{host}:{port}")
+    print("[desktop-bridge] Session shared with Telegram/CLI/Discord")
+    sys.stdout.flush()
+
+    # Run forever (until cancelled)
+    try:
+        while True:
+            await asyncio.sleep(3600)
+    except asyncio.CancelledError:
+        await runner.cleanup()
+        raise
+
+
+def main():
+    """Standalone entry point (for development / testing)."""
+    init_session_manager()
+    port = int(os.getenv("DESKTOP_BRIDGE_PORT", "8790"))
+    app = create_app()
+
+    print(f"[desktop-bridge] Starting on http://127.0.0.1:{port}")
+    print(f"[desktop-bridge] Model: {yolo_agent.router.config.model} via {yolo_agent.router.config.provider}")
+    print("[desktop-bridge] Session DB: ~/.yolo/yolo_v2.db (shared with Telegram/CLI)")
+    print("[desktop-bridge] Bridge ready")
+    sys.stdout.flush()
+
+    try:
+        web.run_app(app, host="127.0.0.1", port=port, print=None)
+    except OSError as e:
+        if e.errno == 98:
+            print(f"[desktop-bridge] Port {port} is already in use. Assuming bridge is already running.")
+        else:
+            raise
+
+
+if __name__ == "__main__":
+    main()
 
 
 async def run_desktop_bridge(

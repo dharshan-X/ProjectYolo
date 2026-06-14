@@ -53,7 +53,7 @@ from tools.file_ops import (
 from tools.identity_ops import read_user_identity, update_user_identity
 from tools.mcp_manager import list_mcp_servers
 from tools.mcp_ops import mcp_list_tools, mcp_run_tool
-from tools.memory_ops import memory_add, memory_delete, memory_list, memory_wipe
+from tools.memory_ops import memory_add, memory_delete, memory_list, memory_wipe, memory_search
 from tools.media_ops import transcribe_audio
 from tools.mission_ops import create_mission, read_mission, update_mission
 from tools.research_ops import (
@@ -66,6 +66,7 @@ from tools.research_ops import (
 )
 from tools.skill_ops import develop_new_skill, list_skills, read_skill
 from tools.system_ops import (
+    adjust_rate_limiting,
     run_bash,
     terminal_interactive_run,
     terminal_list,
@@ -117,6 +118,7 @@ from tools.team_ops import (
     spawn_swarm,
     broadcast_swarm_message,
     read_swarm_messages,
+    wait_for_swarm_message,
 )
 from tools.media_ops import generate_image
 from tools.plugin_manager import PLUGIN_HANDLERS, PLUGIN_SCHEMAS
@@ -132,6 +134,7 @@ __all__ = [
     "spawn_swarm",
     "broadcast_swarm_message",
     "read_swarm_messages",
+    "wait_for_swarm_message",
     "copy_file",
     "delete_file",
     "edit_file",
@@ -146,6 +149,7 @@ __all__ = [
     "list_skills",
     "read_skill",
     "develop_new_skill",
+    "adjust_rate_limiting",
     "run_bash",
     "terminal_interactive_run",
     "terminal_list",
@@ -269,7 +273,8 @@ TOOLS_SCHEMAS = [
                 "type": "object",
                 "properties": {
                     "role": {"type": "string", "description": "The persona/role (e.g. 'Database Expert', 'Frontend Dev')"},
-                    "objective": {"type": "string", "description": "Clear, detailed instructions for what the worker must accomplish."}
+                    "objective": {"type": "string", "description": "Clear, detailed instructions for what the worker must accomplish."},
+                    "model": {"type": "string", "description": "Optional model override (e.g. 'openai/gpt-4o' or 'claude-3-5-sonnet-20241022')"}
                 },
                 "required": ["role", "objective"]
             }
@@ -297,7 +302,8 @@ TOOLS_SCHEMAS = [
                         "items": {"type": "string"},
                         "description": "List of personas to invite (e.g. ['Security Expert', 'Stuck Backend Worker', 'Database Architect'])"
                     },
-                    "max_rounds": {"type": "integer", "description": "Max turns they take to debate (default 3, max 5)"}
+                    "max_rounds": {"type": "integer", "description": "Max turns they take to debate (default 3, max 5)"},
+                    "model": {"type": "string", "description": "Optional model override (e.g. 'openai/gpt-4o' or 'claude-3-5-sonnet-20241022')"}
                 },
                 "required": ["topic", "roles"]
             }
@@ -324,7 +330,8 @@ TOOLS_SCHEMAS = [
                         "type": "array",
                         "items": {"type": "string"},
                         "description": "List of specialized roles needed (e.g. ['Researcher', 'Coder', 'Reviewer'])"
-                    }
+                    },
+                    "model": {"type": "string", "description": "Optional model override (e.g. 'openai/gpt-4o' or 'claude-3-5-sonnet-20241022')"}
                 },
                 "required": ["objective", "roles"]
             }
@@ -359,6 +366,22 @@ TOOLS_SCHEMAS = [
                     "limit": {"type": "integer"}
                 },
                 "required": ["swarm_id"]
+            }
+        }
+        },
+        {
+        "type": "function",
+        "function": {
+            "name": "wait_for_swarm_message",
+            "description": "Worker tool: Pause execution and wait until a message matching a regex pattern is broadcasted to the swarm.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "swarm_id": {"type": "string"},
+                    "pattern": {"type": "string", "description": "Regex pattern to match in the broadcasted messages."},
+                    "timeout_seconds": {"type": "integer", "description": "Max seconds to wait. Defaults to 300."}
+                },
+                "required": ["swarm_id", "pattern"]
             }
         }
         },
@@ -1203,6 +1226,23 @@ TOOLS_SCHEMAS = [
     {
         "type": "function",
         "function": {
+            "name": "adjust_rate_limiting",
+            "description": "Adjust the LLM request rate limit (requests per minute). Set to 0 to disable.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "rpm_limit": {
+                        "type": "integer",
+                        "description": "The new requests per minute limit (e.g. 40). Set to 0 to disable rate limiting."
+                    }
+                },
+                "required": ["rpm_limit"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "read_file",
             "description": "Read a file.",
             "parameters": {
@@ -1360,12 +1400,14 @@ TOOLS_SCHEMAS = [
         "type": "function",
         "function": {
             "name": "gui_mouse_click",
-            "description": "Click a mouse button.",
+            "description": "Click a mouse button, optionally at a specific (x, y) coordinate.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "button": {"type": "string", "enum": ["left", "right", "middle"]},
                     "clicks": {"type": "integer", "description": "Number of clicks"},
+                    "x": {"type": "integer", "description": "Optional x coordinate to click at"},
+                    "y": {"type": "integer", "description": "Optional y coordinate to click at"},
                 },
             },
         },

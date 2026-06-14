@@ -84,8 +84,10 @@
 
     if (data.type === 'choice') {
       const optionsHtml = (data.options || []).map(opt => {
-        const label = opt.label.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        const val = opt.value.replace(/"/g, '&quot;');
+        const labelText = typeof opt === 'object' && opt !== null ? (opt.label || '') : String(opt);
+        const valueText = typeof opt === 'object' && opt !== null ? (opt.value || labelText) : String(opt);
+        const label = labelText.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const val = valueText.replace(/"/g, '&quot;');
         return `<button class="widget-btn" data-widget-id="${data.id}" data-value="${val}">${label}</button>`;
       }).join('');
       
@@ -115,8 +117,10 @@
       
     } else if (data.type === 'multi-select') {
       const optionsHtml = (data.options || []).map(opt => {
-        const label = opt.label.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        const val = opt.value.replace(/"/g, '&quot;');
+        const labelText = typeof opt === 'object' && opt !== null ? (opt.label || '') : String(opt);
+        const valueText = typeof opt === 'object' && opt !== null ? (opt.value || labelText) : String(opt);
+        const label = labelText.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const val = valueText.replace(/"/g, '&quot;');
         return `<button class="widget-toggle-btn" data-widget-id="${data.id}" data-value="${val}">${label}</button>`;
       }).join('');
       contentHtml = `
@@ -141,6 +145,7 @@
         </div>
         <button class="widget-submit-btn slider-submit" data-widget-id="${data.id}">Submit</button>
       `;
+
     } else {
       console.warn('Unsupported widget type:', data.type);
       return;
@@ -209,12 +214,23 @@
     workersToggleBtn: $('#workers-toggle-btn'),
     workersPanel: $('#workers-panel'),
     closeWorkers: $('#close-workers'),
+    tabWorkers: $('#tab-workers'),
+    tabSwarms: $('#tab-swarms'),
+    workersTabContent: $('#workers-tab-content'),
+    swarmsTabContent: $('#swarms-tab-content'),
     workersListView: $('#workers-list-view'),
     workersList: $('#workers-list'),
     workerChatView: $('#worker-chat-view'),
     backToWorkers: $('#back-to-workers'),
     workerChatTitle: $('#worker-chat-title'),
     workerChatMessages: $('#worker-chat-messages'),
+    swarmsListView: $('#swarms-list-view'),
+    swarmsList: $('#swarms-list'),
+    swarmChatView: $('#swarm-chat-view'),
+    backToSwarms: $('#back-to-swarms'),
+    swarmChatTitle: $('#swarm-chat-title'),
+    swarmGraphContainer: $('#swarm-graph-container'),
+    swarmChatMessages: $('#swarm-chat-messages'),
     voiceBtn: $('#voice-btn'),
     recordingIndicator: $('#recording-indicator'),
     fileUpload: $('#file-upload'),
@@ -225,6 +241,21 @@
     toggleSettingsSidebar: $('#toggle-settings-sidebar'),
     settingsSidebar: $('.settings-sidebar'),
     sidebarToggleBtn: $('#sidebar-toggle-btn'),
+    widgetsPanel: $('#widgets-panel'),
+    closeWidgets: $('#close-widgets'),
+    stopwatchDisplay: $('#desktop-stopwatch-display'),
+    stopwatchToggle: $('#desktop-stopwatch-toggle'),
+    stopwatchLap: $('#desktop-stopwatch-lap'),
+    stopwatchReset: $('#desktop-stopwatch-reset'),
+    stopwatchLaps: $('#desktop-stopwatch-laps'),
+    timerWidget: $('#desktop-timer'),
+    timerDisplay: $('#desktop-timer-display'),
+    timerToggle: $('#desktop-timer-toggle'),
+    timerReset: $('#desktop-timer-reset'),
+    timerAdd10s: $('#desktop-timer-add-10s'),
+    timerAdd1m: $('#desktop-timer-add-1m'),
+    timerAdd5m: $('#desktop-timer-add-5m'),
+    timerInput: $('#desktop-timer-input'),
   };
 
   // ── Init ──
@@ -1595,8 +1626,8 @@
     
     // Workers
     dom.workersToggleBtn.addEventListener('click', () => {
-      const willOpen = dom.workersPanel.classList.contains('hidden');
-      dom.workersPanel.classList.toggle('hidden');
+      const willOpen = dom.workersPanel.classList.contains('collapsed');
+      dom.workersPanel.classList.toggle('collapsed');
       dom.workersToggleBtn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
       if (willOpen) {
         // focus first interactive element in panel
@@ -1607,10 +1638,11 @@
       }
     });
     dom.closeWorkers.addEventListener('click', () => {
-      dom.workersPanel.classList.add('hidden');
+      dom.workersPanel.classList.add('collapsed');
       dom.workersToggleBtn.setAttribute('aria-expanded', 'false');
       dom.workersToggleBtn.focus();
     });
+
 
     if (dom.toggleSettingsSidebar) {
       dom.toggleSettingsSidebar.addEventListener('click', (e) => {
@@ -1994,10 +2026,50 @@
           if (lang === 'widget' || lang === 'json' || !lang) {
             try {
               const data = JSON.parse(codeText);
-              if (data && data.type && typeof renderActiveWidget === 'function') {
-                // If it successfully parses and has a type, treat it as a widget
-                renderActiveWidget(data);
-                return `<div class="widget-placeholder"><em>[Interactive Widget Expanded]</em></div>`;
+              if (data && data.type) {
+                if (data.type === 'timer') {
+                  const widgetId = 'timer-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+                  const rawDuration = data.duration || data.time || data.seconds || 60;
+                  const duration = parseInt(rawDuration, 10) || 60;
+                  const autoStart = data.action === 'start';
+                  return `
+                    <div class="inline-widget utility-widget inline-timer" id="${widgetId}" data-duration="${duration}" data-autostart="${autoStart}" data-rendered="false">
+                      <div class="utility-widget-header">
+                        <span class="utility-widget-title">Timer</span>
+                        <span class="utility-time-display timer-display">00:00</span>
+                      </div>
+                      <div class="utility-controls-row">
+                        <button class="utility-btn success-btn timer-toggle-btn">Start</button>
+                        <button class="utility-btn error-btn timer-reset-btn">Reset</button>
+                      </div>
+                      <div class="utility-presets-row">
+                        <button class="preset-btn timer-add-10s">+10s</button>
+                        <button class="preset-btn timer-add-1m">+1m</button>
+                        <button class="preset-btn timer-add-5m">+5m</button>
+                      </div>
+                    </div>
+                  `;
+                } else if (data.type === 'stopwatch') {
+                  const widgetId = 'stopwatch-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+                  const autoStart = data.action === 'start';
+                  return `
+                    <div class="inline-widget utility-widget inline-stopwatch" id="${widgetId}" data-autostart="${autoStart}" data-rendered="false">
+                      <div class="utility-widget-header">
+                        <span class="utility-widget-title">Stopwatch</span>
+                        <span class="utility-time-display stopwatch-display">00:00.00</span>
+                      </div>
+                      <div class="utility-controls-row">
+                        <button class="utility-btn success-btn stopwatch-toggle-btn">Start</button>
+                        <button class="utility-btn stopwatch-lap-btn">Lap</button>
+                        <button class="utility-btn error-btn stopwatch-reset-btn">Reset</button>
+                      </div>
+                      <div class="utility-laps-container stopwatch-laps"></div>
+                    </div>
+                  `;
+                } else if (typeof renderActiveWidget === 'function') {
+                  renderActiveWidget(data);
+                  return `<div class="widget-placeholder"><em>[Interactive Widget Expanded]</em></div>`;
+                }
               }
             } catch (e) {
               if (lang === 'widget') {
@@ -2137,6 +2209,186 @@
   async function initializeInlineWidgets(container) {
     if (!container) return;
 
+    // --- Inline Timers ---
+    container.querySelectorAll('.inline-timer:not([data-rendered="true"])').forEach(el => {
+      el.setAttribute('data-rendered', 'true');
+      let duration = parseInt(el.getAttribute('data-duration') || '0', 10);
+      let running = false;
+      let intervalId = null;
+      let isFlashing = false;
+
+      const display = el.querySelector('.timer-display');
+      const toggleBtn = el.querySelector('.timer-toggle-btn');
+      const resetBtn = el.querySelector('.timer-reset-btn');
+
+      const formatTime = (secs) => {
+        const m = Math.floor(secs / 60);
+        const s = secs % 60;
+        return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+      };
+
+      const updateDisplay = () => { display.textContent = formatTime(duration); };
+      updateDisplay();
+
+      const triggerAlarm = () => {
+        isFlashing = true;
+        el.classList.add('timer-ringing');
+        if (window.Notification && Notification.permission === 'granted') {
+          new Notification('Timer Finished', { body: 'Your inline timer has ended!' });
+        }
+      };
+      
+      const stopAlarm = () => {
+        isFlashing = false;
+        el.classList.remove('timer-ringing');
+      };
+
+      const start = () => {
+        if (running) return;
+        if (duration <= 0) duration = 60;
+        running = true;
+        toggleBtn.textContent = 'Pause';
+        toggleBtn.className = 'utility-btn warning-btn';
+        stopAlarm();
+        intervalId = setInterval(() => {
+          if (duration > 0) {
+            duration--;
+            updateDisplay();
+            if (duration === 0) {
+              pause();
+              triggerAlarm();
+            }
+          }
+        }, 1000);
+      };
+
+      const pause = () => {
+        running = false;
+        toggleBtn.textContent = duration > 0 ? 'Resume' : 'Start';
+        toggleBtn.className = 'utility-btn success-btn';
+        if (intervalId) { clearInterval(intervalId); intervalId = null; }
+      };
+
+      const reset = () => {
+        pause();
+        duration = 0;
+        stopAlarm();
+        updateDisplay();
+      };
+
+      const adjust = (secs) => {
+        duration = Math.max(0, duration + secs);
+        stopAlarm();
+        updateDisplay();
+        if (!running) toggleBtn.textContent = duration > 0 ? 'Resume' : 'Start';
+      };
+
+      toggleBtn.addEventListener('click', () => running ? pause() : start());
+      resetBtn.addEventListener('click', reset);
+      el.querySelector('.timer-add-10s')?.addEventListener('click', () => adjust(10));
+      el.querySelector('.timer-add-1m')?.addEventListener('click', () => adjust(60));
+      el.querySelector('.timer-add-5m')?.addEventListener('click', () => adjust(300));
+      
+      if (el.getAttribute('data-autostart') === 'true') {
+        start();
+      }
+    });
+
+    // --- Inline Stopwatches ---
+    container.querySelectorAll('.inline-stopwatch:not([data-rendered="true"])').forEach(el => {
+      el.setAttribute('data-rendered', 'true');
+      let running = false;
+      let startTime = 0;
+      let elapsed = 0;
+      let laps = [];
+      let intervalId = null;
+
+      const display = el.querySelector('.stopwatch-display');
+      const toggleBtn = el.querySelector('.stopwatch-toggle-btn');
+      const lapBtn = el.querySelector('.stopwatch-lap-btn');
+      const resetBtn = el.querySelector('.stopwatch-reset-btn');
+      const lapsContainer = el.querySelector('.stopwatch-laps');
+
+      const formatTime = (ms) => {
+        const totalSeconds = ms / 1000;
+        const mins = Math.floor(totalSeconds / 60);
+        const secs = Math.floor(totalSeconds % 60);
+        const centi = Math.floor((ms % 1000) / 10);
+        return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}.${String(centi).padStart(2, '0')}`;
+      };
+
+      const updateDisplay = () => {
+        const currentElapsed = running ? (Date.now() - startTime) : elapsed;
+        display.textContent = formatTime(currentElapsed);
+      };
+
+      const updateLaps = () => {
+        lapsContainer.innerHTML = '';
+        const reversedLaps = [...laps].reverse();
+        reversedLaps.slice(0, 3).forEach((lapTime, i) => {
+          const lapNum = laps.length - i;
+          const row = document.createElement('div');
+          row.className = 'utility-lap-row';
+          row.innerHTML = `<span>Lap ${String(lapNum).padStart(2, '0')}</span><span>${formatTime(lapTime)}</span>`;
+          lapsContainer.appendChild(row);
+        });
+        if (reversedLaps.length > 3) {
+          const moreRow = document.createElement('div');
+          moreRow.className = 'utility-lap-row';
+          moreRow.style.justifyContent = 'center';
+          moreRow.innerHTML = '<span style="color: var(--text-muted);">...</span>';
+          lapsContainer.appendChild(moreRow);
+        }
+      };
+
+      const start = () => {
+        if (running) return;
+        running = true;
+        startTime = Date.now() - elapsed;
+        toggleBtn.textContent = 'Pause';
+        toggleBtn.className = 'utility-btn warning-btn';
+        intervalId = setInterval(updateDisplay, 10);
+      };
+
+      const pause = () => {
+        if (!running) return;
+        running = false;
+        elapsed = Date.now() - startTime;
+        toggleBtn.textContent = 'Resume';
+        toggleBtn.className = 'utility-btn success-btn';
+        if (intervalId) { clearInterval(intervalId); intervalId = null; }
+        updateDisplay();
+      };
+
+      const reset = () => {
+        running = false;
+        startTime = 0;
+        elapsed = 0;
+        laps = [];
+        if (intervalId) { clearInterval(intervalId); intervalId = null; }
+        display.textContent = '00:00.00';
+        toggleBtn.textContent = 'Start';
+        toggleBtn.className = 'utility-btn success-btn';
+        lapsContainer.innerHTML = '';
+      };
+
+      const recordLap = () => {
+        if (!running && elapsed === 0) return;
+        const lapTime = running ? (Date.now() - startTime) : elapsed;
+        laps.push(lapTime);
+        updateLaps();
+      };
+
+      toggleBtn.addEventListener('click', () => running ? pause() : start());
+      lapBtn.addEventListener('click', recordLap);
+      resetBtn.addEventListener('click', reset);
+      
+      if (el.getAttribute('data-autostart') === 'true') {
+        start();
+      }
+    });
+    if (!container) return;
+
     // Initialize Mermaid
     if (typeof mermaid !== 'undefined') {
       try {
@@ -2219,8 +2471,9 @@
 
   init();
 
-  // ── Workers Logic ──
+  // ── Workers & Swarms Logic ──
   function pollWorkers() {
+    // Poll Background Workers
     window.yoloAPI.fetchWorkers(state.userId)
       .then(res => {
         if (res.workers) {
@@ -2238,7 +2491,7 @@
             state.workerStates[w.task_id] = w.status;
           });
 
-          if (!dom.workersPanel.classList.contains('hidden')) {
+          if (!dom.workersPanel.classList.contains('collapsed') && dom.tabWorkers.classList.contains('active')) {
             if (state.activeWorkerId) {
               fetchWorkerSession(state.activeWorkerId).catch(e => console.error(e));
             } else {
@@ -2249,7 +2502,105 @@
       })
       .catch(e => console.error("Worker poll failed", e));
 
+    // Poll Swarms
+    window.yoloAPI.fetchSwarms(state.userId)
+      .then(res => {
+        if (res.swarms) {
+          if (!dom.workersPanel.classList.contains('collapsed') && dom.tabSwarms.classList.contains('active')) {
+            if (state.activeSwarmId) {
+              fetchSwarmMessages(state.activeSwarmId).catch(e => console.error(e));
+            } else {
+              renderSwarmsList(res.swarms);
+            }
+          }
+        }
+      })
+      .catch(e => console.error("Swarm poll failed", e));
+
     setTimeout(pollWorkers, 3000);
+  }
+
+  function renderSwarmsList(swarms) {
+    if (!swarms || swarms.length === 0) {
+      dom.swarmsList.innerHTML = '<div style="padding:20px; text-align:center; color:var(--text-muted); font-size:13px;">No active swarms</div>';
+      return;
+    }
+    dom.swarmsList.innerHTML = swarms.map(s => {
+      // Calculate overall status based on workers
+      let status = 'Running';
+      if (s.workers && s.workers.length > 0) {
+        if (s.workers.every(w => w.status === 'completed')) status = 'Completed';
+        else if (s.workers.some(w => w.status === 'failed')) status = 'Failed';
+        else if (s.workers.some(w => w.status === 'cancelled')) status = 'Cancelled';
+      }
+
+      return `
+        <div class="swarm-item" data-id="${escapeHtml(s.swarm_id)}">
+          <div class="worker-item-header">
+            <span class="swarm-id-badge">${escapeHtml(s.swarm_id)}</span>
+            <span class="worker-status ${escapeHtml(status.toLowerCase())}">${escapeHtml(status)}</span>
+          </div>
+          <div class="swarm-meta">
+            ${s.workers.length} active workers<br>
+            Last message: ${s.last_active ? formatTime(s.last_active) : 'N/A'}
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    dom.swarmsList.querySelectorAll('.swarm-item').forEach(item => {
+      item.addEventListener('click', () => {
+        state.activeSwarmId = item.dataset.id;
+        dom.swarmChatTitle.textContent = state.activeSwarmId;
+        dom.swarmsListView.classList.add('hidden');
+        dom.swarmChatView.classList.remove('hidden');
+        dom.swarmChatMessages.innerHTML = '<div style="padding:20px; text-align:center; color:var(--text-muted);">Loading swarm messages...</div>';
+        fetchSwarmMessages(state.activeSwarmId);
+      });
+    });
+  }
+
+  async function fetchSwarmMessages(swarmId) {
+    try {
+      const res = await window.yoloAPI.fetchSwarmMessages(swarmId);
+      if (res.messages) {
+        renderSwarmChat(res.messages);
+      }
+    } catch (e) {
+      console.error("Failed to fetch swarm messages", e);
+    }
+  }
+
+  function renderSwarmChat(messages) {
+    if (!messages || messages.length === 0) {
+      dom.swarmChatMessages.innerHTML = '<div style="padding:20px; text-align:center; color:var(--text-muted); font-size:13px;">No messages in this swarm yet.</div>';
+      return;
+    }
+    
+    // Sort oldest first
+    const sorted = [...messages].reverse();
+
+    dom.swarmChatMessages.innerHTML = sorted.map(m => {
+      // Create colored role badge
+      const roleColor = `hsl(${Array.from(m.sender_role).reduce((acc, char) => acc + char.charCodeAt(0), 0) % 360}, 70%, 60%)`;
+      
+      return `
+        <div class="msg user-msg" style="margin-bottom: 12px;">
+          <div class="msg-header">
+            <span style="font-weight: 600; color: ${roleColor}; font-size: 11px; text-transform: uppercase;">${escapeHtml(m.sender_role)}</span>
+            <span style="opacity: 0.6; font-size: 10px;">${formatTime(m.created_at)}</span>
+          </div>
+          <div class="msg-content" style="font-size: 13px; line-height: 1.5; padding-top: 4px;">
+            ${marked.parse(m.message)}
+          </div>
+        </div>
+      `;
+    }).join('');
+    
+    // Auto-scroll to bottom of swarm chat
+    requestAnimationFrame(() => {
+      dom.swarmChatMessages.scrollTop = dom.swarmChatMessages.scrollHeight;
+    });
   }
 
   function renderWorkersList(workers) {

@@ -69,6 +69,15 @@ def reload_router():
     """Manually reload the global router (useful for tests or env changes)."""
     global router
     router = _get_router()
+
+
+def _get_active_router(session: Session) -> LLMRouter:
+    """Get the correct LLMRouter instance for the session."""
+    if getattr(session, "llm_model", None):
+        config = load_llm_config()
+        config.model = session.llm_model
+        return LLMRouter(config)
+    return router
 AUTO_COMPACT_THRESHOLD = int(os.getenv("AUTO_COMPACT_THRESHOLD", "40"))
 _LOCAL_PROMPTS_DIR = Path(__file__).resolve().parent / "configs" / "prompts"
 PROMPTS_DIR = (YOLO_HOME / "prompts") if (YOLO_HOME / "prompts").is_dir() else _LOCAL_PROMPTS_DIR
@@ -89,7 +98,7 @@ def _append_tool_result(
             "content": content,
         }
     )
-    session.history_dirty = True
+    session.mark_dirty()
 
 
 def _turn_state(user_msg: Optional[Any], session: Session, memory_service: Any) -> dict:
@@ -124,6 +133,16 @@ def _turn_state(user_msg: Optional[Any], session: Session, memory_service: Any) 
             memory_service, session.user_id, user_msg, all_results=all_memories
         )
         _merge_memory_context_into_system_prompt(session, memory_context)
+        
+        # Skill Discovery & Strategy Nudge
+        if getattr(session, "llm_call_count", 0) > 0 and session.llm_call_count % 15 == 0:
+            nudge_directive = (
+                "\n[System note: You have been iterating on this task for a while. "
+                "If you feel stuck or are repeating the same generic bash commands, "
+                "remember to utilize your advanced tools: delegate to subagents, "
+                "search for specialized skills, or read logs/memory comprehensively.]"
+            )
+            _inject_system_directive(session, nudge_directive)
 
         if _is_self_upgrade_request(user_msg):
             state["self_upgrade_active"] = True
@@ -136,11 +155,31 @@ def _turn_state(user_msg: Optional[Any], session: Session, memory_service: Any) 
             state["experience_update_start_index"] = len(session.message_history)
 
         session.message_history.append({"role": "user", "content": user_msg})
-        session.history_dirty = True
+        session.mark_dirty()
         log_agent(session.user_id, "IN", user_msg, Fore.CYAN)
 
         if _is_gui_interaction_request(user_msg):
             _inject_system_directive(session, GUI_PERCEPTION_DIRECTIVE)
+    else:
+        # Recover state if resuming without a new user message
+        if session.message_history and session.message_history[0].get("role") == "system":
+            sys_content = session.message_history[0].get("content") or ""
+            if SELF_UPGRADE_SYSTEM_DIRECTIVE in sys_content:
+                state["self_upgrade_active"] = True
+                for i in range(len(session.message_history) - 1, -1, -1):
+                    msg = session.message_history[i]
+                    content = msg.get("content") or ""
+                    if msg.get("role") == "user" and _is_self_upgrade_request(content):
+                        state["self_upgrade_start_index"] = i
+                        break
+            if EXPERIENCE_UPDATE_SYSTEM_DIRECTIVE in sys_content:
+                state["experience_update_active"] = True
+                for i in range(len(session.message_history) - 1, -1, -1):
+                    msg = session.message_history[i]
+                    content = msg.get("content") or ""
+                    if msg.get("role") == "user" and _is_experience_update_request(content):
+                        state["experience_update_start_index"] = i
+                        break
 
     _normalize_single_system_message(session)
     return state
@@ -209,15 +248,15 @@ async def _execute_unanswered_tool_calls(
         except Exception:
             args = {}
 
+        if not isinstance(args, dict):
+            args = {}
+
         if "_invalid_json" in args:
             res = f"Error: Your tool call arguments were not valid JSON. Exception: {args.get('_error')}\nYou sent: {args.get('_invalid_json')}\nPlease fix your JSON syntax (e.g. properly escape newlines as \\n and quotes) and try again."
             _append_tool_result(
                 session, tool_call_id=tc_id, name=func_name, content=res
             )
             continue
-
-        if not isinstance(args, dict):
-            args = {}
 
         if _is_nested_background_mission(session, func_name):
             _append_tool_result(
@@ -247,33 +286,37 @@ async def _execute_unanswered_tool_calls(
             continue
 
         async def run_and_store(name=func_name, arguments=args, call_id=tc_id):
-            result = await execute_tool_direct(
-                name,
-                arguments,
-                session.user_id,
-                signal_handler,
-                session=session,
-                call_id=call_id,
-                confirmed=session.yolo_mode,
-            )
-            return {
-                "role": "tool",
-                "tool_call_id": call_id,
-                "name": name,
-                "content": result,
-            }
+            try:
+                result = await execute_tool_direct(
+                    name,
+                    arguments,
+                    session.user_id,
+                    signal_handler,
+                    session=session,
+                    call_id=call_id,
+                    confirmed=session.yolo_mode,
+                )
+                return {
+                    "role": "tool",
+                    "tool_call_id": call_id,
+                    "name": name,
+                    "content": result,
+                }
+            except Exception as e:
+                return {
+                    "role": "tool",
+                    "tool_call_id": call_id,
+                    "name": name,
+                    "content": f"Tool execution error: {e}",
+                }
 
         tasks.append(run_and_store())
 
     if tasks:
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        results = await asyncio.gather(*tasks)
         for r in results:
-            if isinstance(r, Exception):
-                # Create error tool response so history stays consistent
-                session.message_history.append({"role": "tool", "tool_call_id": "error", "content": f"Tool execution error: {r}"})
-            else:
-                session.message_history.append(r)
-        session.history_dirty = True
+            session.message_history.append(r)
+        session.mark_dirty()
 
     if session.pending_confirmations:
         if signal_handler:
@@ -329,12 +372,94 @@ def _normalize_tool_calls(tool_calls_acc: list) -> list[dict]:
     return valid_tool_calls
 
 
+def zip_history_payload(messages: list, session: Session) -> list:
+    """Compress and compact message payload to avoid LLM usage limits."""
+    zipping_enabled = os.getenv("REQUEST_ZIPPING", "true").lower() == "true"
+    if not zipping_enabled:
+        return messages
+
+    try:
+        threshold = int(os.getenv("REQUEST_ZIPPING_THRESHOLD", "4000"))
+    except ValueError:
+        threshold = 4000
+
+    try:
+        keep_head = int(os.getenv("REQUEST_ZIPPING_KEEP_HEAD", "1500"))
+    except ValueError:
+        keep_head = 1500
+
+    try:
+        keep_tail = int(os.getenv("REQUEST_ZIPPING_KEEP_TAIL", "1000"))
+    except ValueError:
+        keep_tail = 1000
+
+    zipped = []
+    for msg in messages:
+        msg_copy = dict(msg)
+        content = msg_copy.get("content")
+        role = msg_copy.get("role")
+        
+        if not content:
+            zipped.append(msg_copy)
+            continue
+
+        if isinstance(content, str):
+            if len(content) > threshold:
+                original_len = len(content)
+                msg_copy["content"] = (
+                    content[:keep_head]
+                    + f"\n\n... [REQUEST ZIPPED: Truncated {original_len - (keep_head + keep_tail)} characters to avoid usage limits] ...\n\n"
+                    + content[-keep_tail:]
+                )
+                from prompt_builder import log_agent
+                from colorama import Fore
+                log_agent(
+                    session.user_id,
+                    "ZIP",
+                    f"Zipped message content of role '{role}' ({original_len} -> {len(msg_copy['content'])} chars) to avoid usage limits.",
+                    Fore.CYAN
+                )
+        elif isinstance(content, list):
+            new_list = []
+            changed = False
+            for item in content:
+                if isinstance(item, dict) and item.get("type") == "text" and isinstance(item.get("text"), str):
+                    text = item["text"]
+                    if len(text) > threshold:
+                        original_len = len(text)
+                        zipped_text = (
+                            text[:keep_head]
+                            + f"\n\n... [REQUEST ZIPPED: Truncated {original_len - (keep_head + keep_tail)} characters to avoid usage limits] ...\n\n"
+                            + text[-keep_tail:]
+                        )
+                        item_copy = dict(item)
+                        item_copy["text"] = zipped_text
+                        new_list.append(item_copy)
+                        changed = True
+                        from prompt_builder import log_agent
+                        from colorama import Fore
+                        log_agent(
+                            session.user_id,
+                            "ZIP",
+                            f"Zipped multimodal text item of role '{role}' ({original_len} -> {len(zipped_text)} chars) to avoid usage limits.",
+                            Fore.CYAN
+                        )
+                        continue
+                new_list.append(item)
+            if changed:
+                msg_copy["content"] = new_list
+
+        zipped.append(msg_copy)
+    return zipped
+
+
 async def _stream_llm_round(
     session: Session,
     current_tools: list,
     signal_handler: Optional[Callable],
 ) -> tuple[Optional[dict], Optional[str]]:
     max_llm_retries = 3
+    active_router = _get_active_router(session)
 
     for llm_attempt in range(max_llm_retries):
         full_content = ""
@@ -345,8 +470,9 @@ async def _stream_llm_round(
         last_stream_time = 0.0
 
         try:
-            response = await router.chat_completions(
-                messages=session.message_history,
+            zipped_messages = zip_history_payload(session.message_history, session)
+            response = await active_router.chat_completions(
+                messages=zipped_messages,
                 tools=current_tools,
                 tool_choice="auto",
                 stream=True,
@@ -405,25 +531,28 @@ async def _stream_llm_round(
             }, None
 
         except Exception as e:
-            err_msg = str(e).lower()
-            retryable_patterns = [
-                "peer closed", "incomplete chunked read", "connection reset",
-                "remote protocol error", "connection closed", "readtimeout",
-                "timeout", "rate limit", "429", "500", "502", "503", "504",
-                "llm error",
-            ]
-            if any(x in err_msg for x in retryable_patterns) and llm_attempt < max_llm_retries - 1:
+            from error_classifier import classify_api_error, FailoverReason
+            classified = classify_api_error(e)
+            
+            if classified.retryable and llm_attempt < max_llm_retries - 1:
+                if classified.reason == FailoverReason.CONTEXT_OVERFLOW:
+                    log_agent(session.user_id, "SYSTEM", "Context overflow detected. Attempting to compress context...", Fore.YELLOW)
+                    # Trigger compaction and retry immediately
+                    await _compact_history(session, active_router)
+                    continue
+                    
+                delay = classified.recommended_delay * (llm_attempt + 1)
                 log_agent(
                     session.user_id,
                     "RETRY",
-                    f"LLM stream interrupted ({e}). Retrying ({llm_attempt + 1}/{max_llm_retries})...",
+                    f"LLM failover triggered ({classified.reason.value}). Retrying in {delay}s ({llm_attempt + 1}/{max_llm_retries})...",
                     Fore.YELLOW,
                 )
                 if signal_handler:
                     await signal_handler(
-                        f"__STATUS__: Connection issues, retrying ({llm_attempt + 1})..."
+                        f"__STATUS__: API issue ({classified.reason.value}), retrying ({llm_attempt + 1})..."
                     )
-                await asyncio.sleep(1.0 + llm_attempt)
+                await asyncio.sleep(delay)
                 continue
             return None, f"Error: LLM issue: {e}"
 
@@ -453,7 +582,7 @@ def _append_assistant_round(session: Session, round_result: dict) -> bool:
         msg_dict["tool_calls"] = valid_tool_calls
 
     session.message_history.append(msg_dict)
-    session.history_dirty = True
+    session.mark_dirty()
     return bool(valid_tool_calls)
 
 
@@ -487,7 +616,7 @@ async def _finalize_or_request_more_work(
                 "If `validation_pytest` is missing, run at least one `pytest` command via `run_bash`."
             )
             session.message_history.append({"role": "user", "content": guidance})
-            session.history_dirty = True
+            session.mark_dirty()
             return None
 
     if turn_state["experience_update_active"]:
@@ -501,7 +630,7 @@ async def _finalize_or_request_more_work(
                 "Then provide confirmation that the experience was actually stored."
             )
             session.message_history.append({"role": "user", "content": guidance})
-            session.history_dirty = True
+            session.mark_dirty()
             return None
 
     if memory_service and user_msg:
@@ -522,6 +651,42 @@ async def _finalize_or_request_more_work(
     return full_content or "Task completed."
 
 
+def _detect_tool_loop(session: Session, limit: int = 5) -> Optional[str]:
+    """Detect if the agent is stuck calling the same tool with identical arguments consecutively."""
+    history = session.message_history
+    if not history:
+        return None
+
+    tool_calls = []
+    for msg in reversed(history):
+        if msg.get("role") == "assistant" and msg.get("tool_calls"):
+            for tc in msg["tool_calls"]:
+                func = tc.get("function", {})
+                name = func.get("name")
+                if name in ("check_workers", "get_worker_status", "read_swarm_messages"):
+                    continue
+                try:
+                    args = json.dumps(func.get("arguments"), sort_keys=True)
+                except Exception:
+                    args = str(func.get("arguments"))
+                tool_calls.append((name, args))
+                if len(tool_calls) >= limit:
+                    break
+        if len(tool_calls) >= limit:
+            break
+
+    if len(tool_calls) < limit:
+        return None
+
+    first = tool_calls[0]
+    if all(tc == first for tc in tool_calls):
+        return (
+            f"Agent loop detected: The tool '{first[0]}' was called {limit} times consecutively "
+            f"with the same arguments ({first[1]}). Breaking iteration loop to prevent infinite execution."
+        )
+    return None
+
+
 async def run_agent_turn(
     user_msg: Optional[Any],
     session: Session,
@@ -534,6 +699,23 @@ async def run_agent_turn(
     agent_iterations = 0
     while agent_iterations < max_agent_iterations:
         agent_iterations += 1
+
+        loop_error = _detect_tool_loop(session)
+        if loop_error:
+            log_agent(session.user_id, "WARN", loop_error, Fore.RED)
+            return loop_error
+
+        if session.pending_confirmations:
+            if signal_handler:
+                await signal_handler("__STATUS__: ")
+            first = session.pending_confirmations[0]
+            raise PendingConfirmationError(
+                first["action"],
+                first["path"],
+                first["tool_call_id"],
+                first["args"],
+            )
+
         if await _execute_unanswered_tool_calls(
             _find_unanswered_tool_calls(session), session, signal_handler
         ):
@@ -542,7 +724,7 @@ async def run_agent_turn(
         _normalize_single_system_message(session)
 
         if len(session.message_history) > AUTO_COMPACT_THRESHOLD:
-            await _compact_history(session, router)
+            await _compact_history(session, _get_active_router(session))
 
         log_agent(session.user_id, "THINKING", "Consulting LLM...", Fore.MAGENTA)
         if signal_handler:
@@ -636,7 +818,7 @@ async def resolve_confirmations(
                     "content": result,
                 }
             )
-    session.history_dirty = True
+    session.mark_dirty()
     
     # After resolving, run the agent turn again to process results
     return await run_agent_turn(None, session, signal_handler=signal_handler)
@@ -673,7 +855,7 @@ async def deny_confirmations(session: Session, deny_all: bool = True) -> None:
                     "content": "Action denied by user.",
                 }
             )
-    session.history_dirty = True
+    session.mark_dirty()
 
 
 def main():
