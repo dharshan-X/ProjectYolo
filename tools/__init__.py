@@ -66,6 +66,7 @@ from tools.research_ops import (
 )
 from tools.skill_ops import develop_new_skill, list_skills, read_skill
 from tools.system_ops import (
+    adjust_rate_limiting,
     run_bash,
     terminal_interactive_run,
     terminal_list,
@@ -148,6 +149,7 @@ __all__ = [
     "list_skills",
     "read_skill",
     "develop_new_skill",
+    "adjust_rate_limiting",
     "run_bash",
     "terminal_interactive_run",
     "terminal_list",
@@ -1224,6 +1226,23 @@ TOOLS_SCHEMAS = [
     {
         "type": "function",
         "function": {
+            "name": "adjust_rate_limiting",
+            "description": "Adjust the LLM request rate limit (requests per minute). Set to 0 to disable.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "rpm_limit": {
+                        "type": "integer",
+                        "description": "The new requests per minute limit (e.g. 40). Set to 0 to disable rate limiting."
+                    }
+                },
+                "required": ["rpm_limit"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "read_file",
             "description": "Read a file.",
             "parameters": {
@@ -1381,12 +1400,14 @@ TOOLS_SCHEMAS = [
         "type": "function",
         "function": {
             "name": "gui_mouse_click",
-            "description": "Click a mouse button.",
+            "description": "Click a mouse button, optionally at a specific (x, y) coordinate.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "button": {"type": "string", "enum": ["left", "right", "middle"]},
                     "clicks": {"type": "integer", "description": "Number of clicks"},
+                    "x": {"type": "integer", "description": "Optional x coordinate to click at"},
+                    "y": {"type": "integer", "description": "Optional y coordinate to click at"},
                 },
             },
         },

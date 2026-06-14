@@ -318,7 +318,39 @@ EXPERIENCE_UPDATE_SYSTEM_DIRECTIVE = _load_mode_directive(
 THINK_MODE_SYSTEM_DIRECTIVE = _load_mode_directive(
     "think", LEGACY_THINK_MODE_SYSTEM_DIRECTIVE
 )
-GUI_PERCEPTION_DIRECTIVE = LEGACY_GUI_PERCEPTION_DIRECTIVE
+GUI_PERCEPTION_DIRECTIVE = _load_mode_directive(
+    "gui", LEGACY_GUI_PERCEPTION_DIRECTIVE
+)
+
+
+def _load_and_expose_all_prompts():
+    """Dynamically scan prompts directories and expose all .md files as module-level variables."""
+    dirs = []
+    if PROMPTS_DIR.is_dir():
+        dirs.append(PROMPTS_DIR)
+    user_prompts_dir = YOLO_HOME / "prompts"
+    if user_prompts_dir.is_dir() and user_prompts_dir.resolve() not in [d.resolve() for d in dirs]:
+        dirs.append(user_prompts_dir)
+        
+    for d in dirs:
+        try:
+            for path in d.glob("*.md"):
+                name = path.stem
+                # Convert template name to a Python variable name (uppercase, underscores instead of hyphens)
+                var_name = name.upper().replace("-", "_")
+                # Avoid overriding core system functions or variables
+                if var_name in globals() and var_name in ("Session", "Path", "VERBOSE", "PROMPTS_DIR"):
+                    continue
+                try:
+                    content = path.read_text(encoding="utf-8").strip()
+                    if content:
+                        globals()[var_name] = content
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+_load_and_expose_all_prompts()
 
 
 def _matches_intent(msg: str, triggers: list, negations: list = None) -> bool:

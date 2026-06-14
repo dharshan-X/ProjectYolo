@@ -141,21 +141,42 @@ def gui_mouse_move(x: int, y: int, duration: float = 0.0) -> str:
 
 
 @register_tool()
-def gui_mouse_click(button: str = "left", clicks: int = 1) -> str:
-    """Click the mouse."""
+def gui_mouse_click(
+    button: str = "left",
+    clicks: int = 1,
+    x: Optional[int] = None,
+    y: Optional[int] = None,
+) -> str:
+    """Click the mouse at the current position, or at the specified (x, y) coordinates if provided."""
     _check_pyautogui()
     try:
-        pyautogui.click(button=button, clicks=clicks)
-        audit_log(
-            "gui_mouse_click",
-            {"button": button, "clicks": clicks},
-            "success",
-            "Mouse clicked",
-        )
-        return f"Clicked {button} button {clicks} time(s)"
+        target_x = int(x) if x is not None else None
+        target_y = int(y) if y is not None else None
+
+        if target_x is not None and target_y is not None:
+            pyautogui.click(x=target_x, y=target_y, button=button, clicks=clicks)
+            audit_log(
+                "gui_mouse_click",
+                {"button": button, "clicks": clicks, "x": target_x, "y": target_y},
+                "success",
+                f"Mouse clicked at ({target_x}, {target_y})",
+            )
+            return f"Clicked {button} button {clicks} time(s) at ({target_x}, {target_y})"
+        else:
+            pyautogui.click(button=button, clicks=clicks)
+            audit_log(
+                "gui_mouse_click",
+                {"button": button, "clicks": clicks},
+                "success",
+                "Mouse clicked",
+            )
+            return f"Clicked {button} button {clicks} time(s)"
     except Exception as e:
         audit_log(
-            "gui_mouse_click", {"button": button, "clicks": clicks}, "error", str(e)
+            "gui_mouse_click",
+            {"button": button, "clicks": clicks, "x": x, "y": y},
+            "error",
+            str(e),
         )
         return f"Error: {e}"
 
@@ -382,81 +403,158 @@ def _ocr_image(
 
 
 def _get_atspi_elements(region: Optional[Tuple[int, int, int, int]] = None) -> List[Dict[str, Any]]:
-    """Traverse the AT-SPI2 accessibility tree to find interactive UI elements."""
+    """Traverse the AT-SPI2 accessibility tree to find interactive UI elements.
+
+    Performance/quality improvements over the naive approach:
+      - MAX_DEPTH / MAX_ELEMENTS caps to prevent unbounded traversal
+      - Compositor noise names (Wayland surface, X11 window …) are skipped
+      - Structural container roles are traversed but never emitted
+      - Expanded set of interactive roles covers toggle buttons, headings,
+        sliders, dialogs, alerts, list items, images, etc.
+      - Generic unnamed elements (text='button') are dropped
+      - Default region bounds the search to screen dimensions to filter off-screen noise
+    """
     if Atspi is None:
         return []
-    
+
     try:
         desktop = Atspi.get_desktop(0)
     except Exception:
         return []
-        
+
     if not desktop:
         return []
 
-    elements = []
+    # Set default region to screen bounds to filter out off-screen elements
+    if region is None:
+        try:
+            import pyautogui
+            screen_w, screen_h = pyautogui.size()
+        except Exception:
+            screen_w, screen_h = 1920, 1080
+        region = (0, 0, screen_w, screen_h)
+
+    # ---- tuning knobs ----
+    MAX_ELEMENTS = 500
+    MAX_DEPTH = 30
+
+    # Names produced by the Wayland/X11 compositor that have zero
+    # informational value for GUI interaction.
+    _COMPOSITOR_NOISE = frozenset({
+        "wayland window", "wayland surface", "wayland surface container",
+        "x11 window", "main stage",
+    })
+
+    # Structural container roles — traverse children but never emit.
+    _CONTAINER_ROLES = frozenset({
+        Atspi.Role.PANEL, Atspi.Role.FILLER, Atspi.Role.SCROLL_PANE,
+        Atspi.Role.VIEWPORT, Atspi.Role.REDUNDANT_OBJECT,
+        Atspi.Role.SECTION, Atspi.Role.BLOCK_QUOTE, Atspi.Role.WINDOW,
+        Atspi.Role.APPLICATION, Atspi.Role.DOCUMENT_WEB,
+        Atspi.Role.DOCUMENT_FRAME, Atspi.Role.INTERNAL_FRAME,
+        Atspi.Role.EMBEDDED, Atspi.Role.SEPARATOR,
+        Atspi.Role.TREE, Atspi.Role.TABLE, Atspi.Role.TREE_TABLE,
+        Atspi.Role.LIST, Atspi.Role.SCROLL_BAR,
+        Atspi.Role.STATUS_BAR, Atspi.Role.SPLIT_PANE,
+        Atspi.Role.LAYERED_PANE, Atspi.Role.GLASS_PANE,
+    })
+
+    # Roles that represent actionable or readable UI elements.
+    _INTERACTIVE_ROLES = frozenset({
+        Atspi.Role.PUSH_BUTTON, Atspi.Role.TOGGLE_BUTTON,
+        Atspi.Role.MENU_ITEM, Atspi.Role.CHECK_MENU_ITEM,
+        Atspi.Role.RADIO_MENU_ITEM,
+        Atspi.Role.TEXT, Atspi.Role.ENTRY, Atspi.Role.PASSWORD_TEXT,
+        Atspi.Role.LINK, Atspi.Role.CHECK_BOX, Atspi.Role.RADIO_BUTTON,
+        Atspi.Role.COMBO_BOX, Atspi.Role.LABEL, Atspi.Role.HEADING,
+        Atspi.Role.PAGE_TAB, Atspi.Role.TABLE_CELL, Atspi.Role.SLIDER,
+        Atspi.Role.SPIN_BUTTON, Atspi.Role.LIST_ITEM,
+        Atspi.Role.MENU, Atspi.Role.MENU_BAR, Atspi.Role.TOOL_BAR,
+        Atspi.Role.IMAGE, Atspi.Role.ICON,
+        Atspi.Role.FRAME, Atspi.Role.DIALOG, Atspi.Role.ALERT,
+    })
+
+    # Generic display-text values that give the agent no useful info.
+    _GENERIC_NAMES = frozenset({
+        "text", "label", "button", "image", "icon", "panel",
+    })
+
+    elements: List[Dict[str, Any]] = []
     idx = 0
 
-    def traverse(node):
+    def traverse(node: Any, depth: int = 0) -> None:
         nonlocal idx
-        if not node:
+        if not node or idx >= MAX_ELEMENTS or depth > MAX_DEPTH:
             return
 
         try:
-            # Check defunct
             state = node.get_state_set()
             if state.contains(Atspi.StateType.DEFUNCT):
                 return
-                
-            # Filter for interactive or text roles
+
+            name = (node.get_name() or "").strip()
+
+            # Skip compositor noise — still traverse children.
+            if name and name.lower() in _COMPOSITOR_NOISE:
+                for i in range(node.get_child_count()):
+                    traverse(node.get_child_at_index(i), depth + 1)
+                return
+
             role = node.get_role()
-            role_name = node.get_role_name()
-            
-            # Extract basic info
-            name = node.get_name() or ""
-            
-            # We care about things we can click or read
-            interesting_roles = [
-                Atspi.Role.PUSH_BUTTON, Atspi.Role.MENU_ITEM, Atspi.Role.TEXT, 
-                Atspi.Role.ENTRY, Atspi.Role.LINK, Atspi.Role.CHECK_BOX, 
-                Atspi.Role.RADIO_BUTTON, Atspi.Role.COMBO_BOX, Atspi.Role.LABEL,
-                Atspi.Role.PAGE_TAB, Atspi.Role.TABLE_CELL
-            ]
-            
-            is_interesting = role in interesting_roles
-            has_text = bool(name.strip())
-            
-            if (is_interesting or has_text) and state.contains(Atspi.StateType.VISIBLE):
-                extents = node.get_extents(Atspi.CoordType.SCREEN)
-                x, y, w, h = extents.x, extents.y, extents.width, extents.height
-                
-                # Check region
-                if w > 0 and h > 0:
-                    in_region = True
-                    if region:
-                        rx, ry, rw, rh = region
-                        if x + w < rx or x > rx + rw or y + h < ry or y > ry + rh:
-                            in_region = False
-                            
-                    if in_region:
-                        elem_type = "button_or_menu" if role in [Atspi.Role.PUSH_BUTTON, Atspi.Role.MENU_ITEM] else ("text" if role == Atspi.Role.TEXT else role_name)
-                        display_text = name.strip() or role_name
-                        elements.append({
-                            "id": idx,
-                            "text": display_text,
-                            "type": elem_type,
-                            "bbox": [x, y, w, h],
-                            "center": [x + w // 2, y + h // 2],
-                        })
-                        idx += 1
-                        
-            # Traverse children
+
+            # Container roles — pass through to children without emitting.
+            if role in _CONTAINER_ROLES:
+                for i in range(node.get_child_count()):
+                    traverse(node.get_child_at_index(i), depth + 1)
+                return
+
+            # Check interactive roles
+            if role in _INTERACTIVE_ROLES and state.contains(Atspi.StateType.VISIBLE):
+                display_text = name or node.get_role_name()
+                # Drop generic unnamed entries (e.g. text="button").
+                if display_text and display_text.lower() not in _GENERIC_NAMES:
+                    try:
+                        extents = node.get_extents(Atspi.CoordType.SCREEN)
+                        x, y, w, h = extents.x, extents.y, extents.width, extents.height
+                    except Exception:
+                        x, y, w, h = 0, 0, 0, 0
+
+                    if w > 2 and h > 2:
+                        in_region = True
+                        if region:
+                            rx, ry, rw, rh = region
+                            if x + w < rx or x > rx + rw or y + h < ry or y > ry + rh:
+                                in_region = False
+
+                        if in_region:
+                            role_name = node.get_role_name()
+                            if role in (Atspi.Role.PUSH_BUTTON, Atspi.Role.TOGGLE_BUTTON,
+                                        Atspi.Role.MENU_ITEM, Atspi.Role.CHECK_MENU_ITEM,
+                                        Atspi.Role.RADIO_MENU_ITEM):
+                                elem_type = "button_or_menu"
+                            elif role == Atspi.Role.TEXT:
+                                elem_type = "text"
+                            else:
+                                elem_type = role_name
+                            elements.append({
+                                "id": idx,
+                                "text": display_text,
+                                "type": elem_type,
+                                "bbox": [x, y, w, h],
+                                "center": [x + w // 2, y + h // 2],
+                            })
+                            idx += 1
+
+            # Always traverse children (unless we already returned above).
             for i in range(node.get_child_count()):
-                traverse(node.get_child_at_index(i))
-                
+                traverse(node.get_child_at_index(i), depth + 1)
+
+        except RecursionError:
+            return
         except Exception:
+            # Individual node failures should not abort the whole traversal.
             pass
-            
+
     traverse(desktop)
     return elements
 
@@ -618,10 +716,87 @@ def _fuzzy_match(query: str, text: str) -> float:
     """Return similarity score 0-1 between query and text."""
     q = query.lower().strip()
     t = text.lower().strip()
+    if q == t:
+        return 1.0
     # Exact substring match → high score
     if q in t or t in q:
         return 0.95
     return SequenceMatcher(None, q, t).ratio()
+
+
+def _spatial_score_modifier(query: str, cx: int, cy: int) -> float:
+    """Analyze query for spatial hints (top, bottom, left, right, dock, etc.) and return a score modifier."""
+    q = query.lower()
+    modifier = 0.0
+
+    try:
+        import pyautogui
+        screen_w, screen_h = pyautogui.size()
+    except Exception:
+        screen_w, screen_h = 1920, 1080
+
+    if screen_w <= 0:
+        screen_w = 1920
+    if screen_h <= 0:
+        screen_h = 1080
+
+    # Dock/Taskbar/Panel check
+    if "dock" in q or "taskbar" in q or "panel" in q:
+        if cy > screen_h * 0.75 or cx < screen_w * 0.15:
+            modifier += 0.15
+        else:
+            modifier -= 0.15
+
+    # Bottom check
+    if "bottom" in q:
+        if cy > screen_h * 0.6:
+            modifier += 0.1
+        elif cy < screen_h * 0.4:
+            modifier -= 0.1
+
+    # Top check
+    if "top" in q:
+        if cy < screen_h * 0.4:
+            modifier += 0.1
+        elif cy > screen_h * 0.6:
+            modifier -= 0.1
+
+    # Left check
+    if "left" in q:
+        if cx < screen_w * 0.4:
+            modifier += 0.1
+        elif cx > screen_w * 0.6:
+            modifier -= 0.1
+
+    # Right check
+    if "right" in q:
+        if cx > screen_w * 0.6:
+            modifier += 0.1
+        elif cx < screen_w * 0.4:
+            modifier -= 0.1
+
+    # Center/Middle check
+    if "center" in q or "middle" in q:
+        if (screen_w * 0.25 < cx < screen_w * 0.75) and (screen_h * 0.25 < cy < screen_h * 0.75):
+            modifier += 0.1
+        else:
+            modifier -= 0.1
+
+    # Coordinate matching check (e.g. "position 805,801")
+    coord_matches = re.findall(r"(\d+)\s*,\s*(\d+)", q)
+    if coord_matches:
+        for mx_str, my_str in coord_matches:
+            mx, my = int(mx_str), int(my_str)
+            dist = ((cx - mx) ** 2 + (cy - my) ** 2) ** 0.5
+            if dist < 50:
+                modifier += 0.3
+            elif dist < 150:
+                modifier += 0.15
+            else:
+                modifier -= 0.2
+
+    return modifier
+
 
 
 # ======================================================================
@@ -752,17 +927,19 @@ def gui_find_element(description: str) -> str:
         # Score all elements against description
         scored = []
         for elem in elements:
-            score = _fuzzy_match(description, elem["text"])
-            scored.append((score, elem))
+            text_score = _fuzzy_match(description, elem["text"])
+            spatial_modifier = _spatial_score_modifier(description, elem["center"][0], elem["center"][1])
+            total_score = text_score + spatial_modifier
+            scored.append((total_score, text_score, elem))
 
         scored.sort(key=lambda x: x[0], reverse=True)
-        best_score, best_elem = scored[0]
+        best_total_score, best_text_score, best_elem = scored[0]
 
-        if best_score >= 0.4:
+        if best_text_score >= 0.4:
             result = {
                 "found": True,
                 "match": best_elem,
-                "confidence": round(best_score, 3),
+                "confidence": round(best_text_score, 3),
                 "center_x": best_elem["center"][0],
                 "center_y": best_elem["center"][1],
             }
@@ -770,7 +947,7 @@ def gui_find_element(description: str) -> str:
                 "gui_find_element",
                 {"description": description},
                 "success",
-                f"Found '{best_elem['text']}' (confidence={best_score:.2f})",
+                f"Found '{best_elem['text']}' (confidence={best_text_score:.2f})",
             )
         else:
             result = {
@@ -778,7 +955,7 @@ def gui_find_element(description: str) -> str:
                 "reason": f"No element matching '{description}' found on screen.",
                 "best_candidate": {
                     "text": best_elem["text"],
-                    "score": round(best_score, 3),
+                    "score": round(best_text_score, 3),
                 },
                 "visible_elements": [
                     {"id": e["id"], "text": e["text"], "type": e["type"]}

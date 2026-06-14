@@ -847,7 +847,7 @@ async def handle_update_env(request: web.Request) -> web.Response:
             "OPENAI_API_KEY", "OPENAI_BASE_URL", 
             "ANTHROPIC_API_KEY", "ANTHROPIC_MODEL", "ANTHROPIC_BASE_URL",
             "OPENROUTER_API_KEY", "OPENROUTER_MODEL", "OPENROUTER_BASE_URL",
-            "LLM_API_KEY", "LLM_BASE_URL"
+            "LLM_API_KEY", "LLM_BASE_URL", "LLM_RPM_LIMIT"
         }
         
         for k, v in data.items():

@@ -651,6 +651,42 @@ async def _finalize_or_request_more_work(
     return full_content or "Task completed."
 
 
+def _detect_tool_loop(session: Session, limit: int = 5) -> Optional[str]:
+    """Detect if the agent is stuck calling the same tool with identical arguments consecutively."""
+    history = session.message_history
+    if not history:
+        return None
+
+    tool_calls = []
+    for msg in reversed(history):
+        if msg.get("role") == "assistant" and msg.get("tool_calls"):
+            for tc in msg["tool_calls"]:
+                func = tc.get("function", {})
+                name = func.get("name")
+                if name in ("check_workers", "get_worker_status", "read_swarm_messages"):
+                    continue
+                try:
+                    args = json.dumps(func.get("arguments"), sort_keys=True)
+                except Exception:
+                    args = str(func.get("arguments"))
+                tool_calls.append((name, args))
+                if len(tool_calls) >= limit:
+                    break
+        if len(tool_calls) >= limit:
+            break
+
+    if len(tool_calls) < limit:
+        return None
+
+    first = tool_calls[0]
+    if all(tc == first for tc in tool_calls):
+        return (
+            f"Agent loop detected: The tool '{first[0]}' was called {limit} times consecutively "
+            f"with the same arguments ({first[1]}). Breaking iteration loop to prevent infinite execution."
+        )
+    return None
+
+
 async def run_agent_turn(
     user_msg: Optional[Any],
     session: Session,
@@ -663,6 +699,11 @@ async def run_agent_turn(
     agent_iterations = 0
     while agent_iterations < max_agent_iterations:
         agent_iterations += 1
+
+        loop_error = _detect_tool_loop(session)
+        if loop_error:
+            log_agent(session.user_id, "WARN", loop_error, Fore.RED)
+            return loop_error
 
         if session.pending_confirmations:
             if signal_handler:

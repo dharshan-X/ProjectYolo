@@ -59,3 +59,9 @@
 {"timestamp": "2026-06-09T18:47:34.953154", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "pattern": "matching message", "timeout": 1}, "status": "info", "detail": ""}
 {"timestamp": "2026-06-09T18:47:34.953546", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "pattern": "matches here", "timeout": 3}, "status": "info", "detail": ""}
 {"timestamp": "2026-06-09T18:47:35.955424", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "status": "matched"}, "status": "success", "detail": ""}
+{"timestamp": "2026-06-10T19:15:31.112039", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "hello"}
+{"timestamp": "2026-06-10T19:15:31.112514", "tool": "agent", "args": {"user_id": 1}, "status": "THINKING", "detail": "Consulting LLM..."}
+{"timestamp": "2026-06-10T19:15:31.997990", "tool": "mcp_manager", "args": {"server": "leetcode"}, "status": "success", "detail": "Connected and loaded tools"}
+{"timestamp": "2026-06-10T19:20:57.439522", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "hello"}
+{"timestamp": "2026-06-10T19:20:57.439831", "tool": "agent", "args": {"user_id": 1}, "status": "THINKING", "detail": "Consulting LLM..."}
+{"timestamp": "2026-06-10T19:20:58.313065", "tool": "mcp_manager", "args": {"server": "leetcode"}, "status": "success", "detail": "Connected and loaded tools"}
