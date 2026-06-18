@@ -5,7 +5,6 @@ import mimetypes
 import os
 import sys
 from datetime import datetime, timezone
-from io import BytesIO
 from pathlib import Path
 from typing import Any, Optional
 
@@ -234,8 +233,7 @@ async def prepare_native_multi_modal(
     parts = []
     if caption:
         parts.append({"type": "text", "text": caption})
-    
-    import base64
+
     try:
         data = media_path.read_bytes()
         b64 = base64.b64encode(data).decode("utf-8")
@@ -794,14 +792,6 @@ async def facts_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             assert update.message is not None
             await update.message.reply_text("No auto basic facts are currently injected.")
             return
-        lines = [f"{i+1}. {fact}" for i, fact in enumerate(facts_list)]
-        if not facts_list:
-            assert update.message is not None
-            await update.message.reply_text(
-                "No auto basic facts are currently injected."
-            )
-            return
-
         lines = [f"{i+1}. {fact}" for i, fact in enumerate(facts_list)]
         await send_long_message(
             (update.effective_chat.id if update.effective_chat else 0),

@@ -83,9 +83,16 @@ def edit_file(
 
 
         content = resolved.read_text(encoding="utf-8")
-        if old_text not in content:
+        occurrences = content.count(old_text)
+        if occurrences == 0:
             return (
                 f"Error: Could not find exact text match for replacement in '{path}'."
+            )
+        if occurrences > 1:
+            return (
+                f"Error: The text to replace appears {occurrences} times in '{path}'. "
+                "Replacement would be ambiguous. Provide a longer, unique snippet "
+                "(include surrounding context) so exactly one match is targeted."
             )
 
         new_content = content.replace(old_text, new_text, 1)

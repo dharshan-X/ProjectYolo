@@ -21,7 +21,7 @@ import secrets
 import os
 import sys
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 # Ensure the project root is on the path so we can import agent/session/tools.
 # When imported from server.py, the CWD is already correct.
@@ -33,12 +33,11 @@ from tools.settings import load_settings
 
 load_settings()
 
-from aiohttp import web  # noqa: E402
+from aiohttp import web
 
-import agent as yolo_agent  # noqa: E402
-from session import SessionManager  # noqa: E402
-from openai import AsyncOpenAI  # noqa: E402
-import mimetypes  # noqa: E402
+import agent as yolo_agent
+from session import SessionManager
+import mimetypes
 
 # ── Shared state (same as bot.py) ──
 TIMEOUT_MINUTES = int(os.getenv("SESSION_TIMEOUT_MINUTES", "60"))
@@ -233,7 +232,7 @@ async def prepare_user_message(text: str, attachments: list) -> Any:
                         "data": b64,
                         "mime_type": "application/pdf"
                     })
-                attachments_text += f"  [Sent PDF natively to model for direct analysis. Use tools only if you need deeper file manipulation.]\n"
+                attachments_text += "  [Sent PDF natively to model for direct analysis. Use tools only if you need deeper file manipulation.]\n"
                 continue
 
             suffix = file_path.suffix.lower()
@@ -455,7 +454,13 @@ async def handle_chat_stream(request: web.Request) -> web.StreamResponse:
         task.cancel()
     finally:
         if not task.done():
+            task.cancel()
+        # Await the task to let it finish cleanup and to retrieve any
+        # exception (prevents "Task exception was never retrieved" warnings).
+        try:
             await task
+        except (asyncio.CancelledError, Exception):
+            pass
 
     return resp
 
@@ -715,19 +720,28 @@ async def handle_get_swarms(request: web.Request) -> web.Response:
     
     with _conn_ctx() as conn:
         cursor = conn.cursor()
-        # Find all swarm_ids mentioned in objective or messages
-        cursor.execute("SELECT DISTINCT swarm_id FROM swarm_messages")
+        # Scope to the requesting user's swarms only (the swarm_messages table
+        # carries no user_id, so derive swarm ids from this user's tasks).
+        cursor.execute(
+            "SELECT DISTINCT swarm_id FROM background_tasks "
+            "WHERE user_id = ? AND swarm_id IS NOT NULL AND swarm_id != ''",
+            (user_id,),
+        )
         swarm_rows = cursor.fetchall()
-        
+
         swarms = []
         for r in swarm_rows:
             swarm_id = r[0]
             # Get latest message for summary
             cursor.execute("SELECT created_at FROM swarm_messages WHERE swarm_id = ? ORDER BY created_at DESC LIMIT 1", (swarm_id,))
             last_msg = cursor.fetchone()
-            
-            # Find workers associated with this swarm
-            cursor.execute("SELECT task_id, objective, status FROM background_tasks WHERE objective LIKE ?", (f"%{swarm_id}%",))
+
+            # Find this user's workers associated with this swarm
+            cursor.execute(
+                "SELECT task_id, objective, status FROM background_tasks "
+                "WHERE swarm_id = ? AND user_id = ?",
+                (swarm_id, user_id),
+            )
             # Extract role from the objective if possible (e.g. "[Lead Developer] ...")
             workers = []
             for w in cursor.fetchall():
@@ -941,63 +955,6 @@ def init_session_manager(shared_manager: SessionManager = None):
     elif session_manager is None:
         session_manager = SessionManager(timeout_minutes=TIMEOUT_MINUTES)
     return session_manager
-
-
-async def run_desktop_bridge(
-    host: str = "127.0.0.1",
-    port: int = 0,
-    shared_session_manager: SessionManager = None,
-) -> None:
-    """Start the desktop bridge as an async task (called from server.py).
-
-    This runs forever alongside Telegram/Discord gateways.
-    """
-    if port == 0:
-        port = int(os.getenv("DESKTOP_BRIDGE_PORT", "8790"))
-
-    init_session_manager(shared_session_manager)
-    app = create_app()
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, host, port)
-    await site.start()
-
-    print(f"[desktop-bridge] Listening on http://{host}:{port}")
-    print("[desktop-bridge] Session shared with Telegram/CLI/Discord")
-    sys.stdout.flush()
-
-    # Run forever (until cancelled)
-    try:
-        while True:
-            await asyncio.sleep(3600)
-    except asyncio.CancelledError:
-        await runner.cleanup()
-        raise
-
-
-def main():
-    """Standalone entry point (for development / testing)."""
-    init_session_manager()
-    port = int(os.getenv("DESKTOP_BRIDGE_PORT", "8790"))
-    app = create_app()
-
-    print(f"[desktop-bridge] Starting on http://127.0.0.1:{port}")
-    print(f"[desktop-bridge] Model: {yolo_agent.router.config.model} via {yolo_agent.router.config.provider}")
-    print("[desktop-bridge] Session DB: ~/.yolo/yolo_v2.db (shared with Telegram/CLI)")
-    print("[desktop-bridge] Bridge ready")
-    sys.stdout.flush()
-
-    try:
-        web.run_app(app, host="127.0.0.1", port=port, print=None)
-    except OSError as e:
-        if e.errno == 98:
-            print(f"[desktop-bridge] Port {port} is already in use. Assuming bridge is already running.")
-        else:
-            raise
-
-
-if __name__ == "__main__":
-    main()
 
 
 async def run_desktop_bridge(

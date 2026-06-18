@@ -1,5 +1,5 @@
 from textual.app import App, ComposeResult
-from textual.containers import Horizontal, Vertical, Grid, ScrollableContainer
+from textual.containers import Horizontal, Vertical, Grid
 from textual.widgets import Header, Footer, Static, Button, Label
 from textual.screen import ModalScreen
 from tui_widgets import ChatWidget, UserInput, WorkWidget, LogWidget, StopwatchWidget, TimerWidget

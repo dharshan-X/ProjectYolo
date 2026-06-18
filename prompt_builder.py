@@ -363,9 +363,11 @@ def _matches_intent(msg: str, triggers: list, negations: list = None) -> bool:
     for trigger in triggers:
         idx = msg_lower.find(trigger)
         if idx != -1:
-            # Check for negations appearing shortly before the trigger
+            # Check for negations appearing shortly before the trigger.
+            # Match negations as whole words so substrings like "no" inside
+            # "now"/"know"/"another" do not spuriously negate the trigger.
             prefix = msg_lower[max(0, idx - 20):idx]
-            if any(n in prefix for n in negations):
+            if any(re.search(r"\b" + re.escape(n) + r"\b", prefix) for n in negations):
                 continue
             return True
     return False
@@ -994,6 +996,18 @@ def _extract_tool_path(args: dict) -> str:
     return "(unknown path)"
 
 
+# Verbs that mark a tool as destructive/sensitive. Matched against the
+# underscore-separated tokens of a tool name (NOT as substrings, so e.g.
+# "skill" is not mistaken for "kill"). This is a fail-safe net so a newly
+# added destructive tool that nobody remembered to add to the explicit set
+# below still trips HITL confirmation in safe mode.
+_DESTRUCTIVE_VERB_TOKENS = frozenset({
+    "delete", "remove", "destroy", "drop", "wipe", "purge", "erase",
+    "kill", "terminate", "overwrite", "uninstall", "format", "truncate",
+    "unlink", "reset", "rmdir", "rm",
+})
+
+
 def _is_destructive_or_sensitive_tool(func_name: str) -> bool:
     destructive = {
         "write_file",
@@ -1007,13 +1021,18 @@ def _is_destructive_or_sensitive_tool(func_name: str) -> bool:
         "terminal_send",
         "terminal_stop",
         "memory_wipe",
+        "memory_delete",
+        "kill_process",
         "cancel_scheduled_task",
         "optimize_skill",
         "update_user_identity",
         "git_commit",
         "git_branch",
     }
-    return func_name in destructive
+    if func_name in destructive:
+        return True
+    # Fail-safe: any tool whose name contains a destructive verb token.
+    return bool(_DESTRUCTIVE_VERB_TOKENS.intersection(str(func_name).lower().split("_")))
 
 
 def _is_out_of_scope(args: dict) -> bool:

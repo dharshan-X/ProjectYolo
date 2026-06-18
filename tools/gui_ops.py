@@ -119,7 +119,7 @@ def _check_ocr():
         raise ImportError(
             "tesseract-ocr binary not found on PATH. "
             "Install it: `sudo apt install tesseract-ocr` or `sudo pacman -S tesseract`"
-        )
+        ) from None
 
 
 # ======================================================================
@@ -299,7 +299,7 @@ def _take_screenshot_pil(save_path: Optional[str] = None) -> "Image.Image":
                         pass
                 return img
             except Exception as scrot_err:
-                raise RuntimeError(f"Screenshot failed. PyAutoGUI error: {e}. Scrot error: {scrot_err}")
+                raise RuntimeError(f"Screenshot failed. PyAutoGUI error: {e}. Scrot error: {scrot_err}") from scrot_err
         else:
             raise e
 
@@ -967,7 +967,7 @@ def gui_find_element(description: str) -> str:
                 "gui_find_element",
                 {"description": description},
                 "not_found",
-                f"Best: '{best_elem['text']}' ({best_score:.2f})",
+                f"Best: '{best_elem['text']}' ({best_text_score:.2f})",
             )
 
         return json.dumps(result, indent=2)

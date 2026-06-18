@@ -98,7 +98,7 @@ class WorkWidget(Vertical):
             return
         
         content = "[b]Tasks:[/b]\n"
-        for task_id, objective, status, created_at in tasks:
+        for task_id, objective, status, _created_at in tasks:
             content += f"- {task_id[:6]}: {objective[:12]} ({status})\n"
         tasks_panel.update(content.rstrip())
 
@@ -150,6 +150,13 @@ class StopwatchWidget(Static):
 
     def on_mount(self) -> None:
         self.update_laps_display()
+
+    def on_unmount(self) -> None:
+        # Cancel the refresh interval so it doesn't outlive the widget
+        # (leaked Textual timers keep firing on the event loop otherwise).
+        if self.update_timer:
+            self.update_timer.stop()
+            self.update_timer = None
 
     def compose(self) -> ComposeResult:
         with Horizontal(classes="widget-header"):
@@ -237,6 +244,16 @@ class TimerWidget(Static):
         self.countdown_timer = None
         self.is_flashing = False
         self.flash_timer = None
+
+    def on_unmount(self) -> None:
+        # Cancel intervals so they don't outlive the widget (leaked Textual
+        # timers keep firing on the event loop otherwise).
+        if self.countdown_timer:
+            self.countdown_timer.stop()
+            self.countdown_timer = None
+        if self.flash_timer:
+            self.flash_timer.stop()
+            self.flash_timer = None
 
     def compose(self) -> ComposeResult:
         with Horizontal(classes="widget-header"):

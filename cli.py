@@ -5,6 +5,7 @@ import os
 from typing import Optional
 
 try:
+    # Imported for its side effect: enables line editing/history in input().
     import readline  # noqa: F401
 except ImportError:
     pass

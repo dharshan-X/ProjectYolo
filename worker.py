@@ -1,7 +1,6 @@
 import asyncio
 import os
 import logging
-import json
 from typing import Any
 from session import Session
 import agent
@@ -151,7 +150,6 @@ async def run_worker_loop(user_id: int, task_id: str, role: str, objective: str,
     finally:
         # Bug 4 fix: Final history persistence
         try:
-            from tools.database_ops import update_background_task_history
             update_background_task_history(task_id, worker_session.message_history)
         except Exception:
             pass
