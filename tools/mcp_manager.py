@@ -11,6 +11,31 @@ from tools.base import YOLO_HOME, audit_log
 MCP_CONFIG_PATH = YOLO_HOME / "mcp_servers.json"
 MCP_CONNECT_TIMEOUT_SECONDS = float(os.getenv("MCP_CONNECT_TIMEOUT_SECONDS", "2"))
 
+# Substrings that mark an env var as a secret. Such vars are NOT inherited by
+# MCP subprocesses (which may be third-party/untrusted) unless explicitly
+# re-supplied via a server's own `env` config. This prevents leaking every
+# provider API key to every MCP server. Set MCP_INHERIT_ALL_ENV=true to opt
+# back into inheriting the full parent environment.
+_MCP_SECRET_MARKERS = ("KEY", "TOKEN", "SECRET", "PASSWORD", "PASSWD", "CREDENTIAL")
+
+
+def _build_mcp_env(server_env: dict) -> dict:
+    """Build the subprocess environment for an MCP server.
+
+    Inherits the parent environment but strips secret-looking variables, then
+    layers the server's explicitly-configured `env` on top (so a server can
+    still receive a secret it actually needs)."""
+    if os.getenv("MCP_INHERIT_ALL_ENV", "false").lower() == "true":
+        merged = os.environ.copy()
+    else:
+        merged = {
+            k: v
+            for k, v in os.environ.items()
+            if not any(marker in k.upper() for marker in _MCP_SECRET_MARKERS)
+        }
+    merged.update(server_env or {})
+    return merged
+
 class MCPManager:
     _instance = None
 
@@ -63,8 +88,7 @@ class MCPManager:
             if not command:
                 continue
 
-            merged_env = os.environ.copy()
-            merged_env.update(env)
+            merged_env = _build_mcp_env(env)
 
             server_params = StdioServerParameters(
                 command=command,

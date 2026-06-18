@@ -7,7 +7,7 @@ from typing import (
     Dict,
     List,
     Optional,
-)  # noqa: F401  (Optional used in dataclass annotations)
+)
 
 from tools.database_ops import init_db, load_session, save_session
 
@@ -102,24 +102,38 @@ class SessionManager:
             return
         session = self.sessions[user_id]
 
-        # Cheap signature: history length + JSON hash of last message
-        # + flags + pending confirmations count. This catches all real mutations without
-        # serializing the entire history just to hash it.
+        # Signature over the full persisted state so any mutation (including to
+        # a middle message or the *content* of a pending confirmation) is
+        # detected. This is the primary guard against dropping a save: the
+        # earlier "len + last message only" version could miss in-place edits to
+        # earlier messages when history_dirty had been cleared. Serializing here
+        # costs the same O(n) as the save we're about to skip, so it's cheap
+        # relative to the SQLite write it avoids.
         import json
-        last_msg = session.message_history[-1] if session.message_history else {}
-        last_msg_hash = hash(json.dumps(last_msg, sort_keys=True))
-        
-        signature = hash(
+        try:
+            history_repr = json.dumps(session.message_history, sort_keys=True, default=str)
+            pending_repr = json.dumps(session.pending_confirmations, sort_keys=True, default=str)
+        except Exception:
+            # Unserializable payload: never dedup, always persist.
+            history_repr = None
+            pending_repr = None
+
+        signature = None if history_repr is None else hash(
             (
                 len(session.message_history),
-                last_msg_hash,
+                hash(history_repr),
                 session.yolo_mode,
                 session.think_mode,
                 session.think_mode_policy,
-                len(session.pending_confirmations),
+                hash(pending_repr),
             )
         )
-        if not force and not session.history_dirty and signature == session.last_saved_signature:
+        if (
+            not force
+            and signature is not None
+            and not session.history_dirty
+            and signature == session.last_saved_signature
+        ):
             return
 
         save_session(

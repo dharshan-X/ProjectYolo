@@ -412,8 +412,15 @@ def _parse_session_id(start_output: str) -> str:
     if idx < 0:
         return ""
     rest = start_output[idx + len(marker) :]
-    token = rest.splitlines()[0].split()[0].strip()
-    return token
+    # Defensive: the remainder may be empty or start with a newline/whitespace
+    # (malformed/truncated terminal_start output). Avoid IndexError on []/[""].
+    lines = rest.splitlines()
+    if not lines:
+        return ""
+    parts = lines[0].split()
+    if not parts:
+        return ""
+    return parts[0].strip()
 
 
 @register_tool()

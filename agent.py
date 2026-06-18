@@ -504,6 +504,11 @@ async def _stream_llm_round(
                 if getattr(delta, "tool_calls", None):
                     for tc in delta.tool_calls:
                         idx = getattr(tc, "index", None) or 0
+                        # Guard against a malformed delta with an absurd index
+                        # causing runaway list allocation. No real response has
+                        # this many parallel tool calls in a single turn.
+                        if not isinstance(idx, int) or idx < 0 or idx > 1024:
+                            continue
                         while len(tool_calls_acc) <= idx:
                             tool_calls_acc.append(
                                 {
@@ -652,37 +657,52 @@ async def _finalize_or_request_more_work(
 
 
 def _detect_tool_loop(session: Session, limit: int = 5) -> Optional[str]:
-    """Detect if the agent is stuck calling the same tool with identical arguments consecutively."""
+    """Detect if the agent is stuck issuing the same tool call(s) across iterations.
+
+    Each *assistant turn* is reduced to the set of its (name, arguments) tool
+    signatures (polling tools excluded). A loop is flagged only when the last
+    `limit` distinct turns carry an identical, non-empty signature set. Working
+    per-turn (rather than per-individual-call) means a single parallel batch of
+    identical calls is not mistaken for a multi-iteration loop, while alternating
+    multi-tool turns are still caught.
+    """
     history = session.message_history
     if not history:
         return None
 
-    tool_calls = []
+    _SKIP = ("check_workers", "get_worker_status", "read_swarm_messages")
+    turn_signatures: list[frozenset] = []
     for msg in reversed(history):
-        if msg.get("role") == "assistant" and msg.get("tool_calls"):
-            for tc in msg["tool_calls"]:
-                func = tc.get("function", {})
-                name = func.get("name")
-                if name in ("check_workers", "get_worker_status", "read_swarm_messages"):
-                    continue
-                try:
-                    args = json.dumps(func.get("arguments"), sort_keys=True)
-                except Exception:
-                    args = str(func.get("arguments"))
-                tool_calls.append((name, args))
-                if len(tool_calls) >= limit:
-                    break
-        if len(tool_calls) >= limit:
+        if msg.get("role") != "assistant" or not msg.get("tool_calls"):
+            continue
+        sig = set()
+        for tc in msg["tool_calls"]:
+            func = tc.get("function", {})
+            name = func.get("name")
+            if name in _SKIP:
+                continue
+            try:
+                args = json.dumps(func.get("arguments"), sort_keys=True)
+            except Exception:
+                args = str(func.get("arguments"))
+            sig.add((name, args))
+        if not sig:
+            # Turn consisted only of polling tools — ignore, don't reset.
+            continue
+        turn_signatures.append(frozenset(sig))
+        if len(turn_signatures) >= limit:
             break
 
-    if len(tool_calls) < limit:
+    if len(turn_signatures) < limit:
         return None
 
-    first = tool_calls[0]
-    if all(tc == first for tc in tool_calls):
+    first = turn_signatures[0]
+    if all(sig == first for sig in turn_signatures):
+        names = ", ".join(sorted({name for name, _ in first}))
         return (
-            f"Agent loop detected: The tool '{first[0]}' was called {limit} times consecutively "
-            f"with the same arguments ({first[1]}). Breaking iteration loop to prevent infinite execution."
+            f"Agent loop detected: the same tool call(s) [{names}] were issued with identical "
+            f"arguments across {limit} consecutive iterations. Breaking iteration loop to prevent "
+            "infinite execution."
         )
     return None
 

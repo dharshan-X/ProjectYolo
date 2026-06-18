@@ -9,13 +9,23 @@ async def _run_sync_callable(func: Callable, kwargs: dict) -> Any:
     loop = asyncio.get_running_loop()
     future = loop.create_future()
 
+    def _settle(setter: Callable, value: Any) -> None:
+        # The event loop may have been closed (e.g. during shutdown) while the
+        # worker thread was still running. call_soon_threadsafe() raises
+        # RuntimeError in that case; swallow it so the thread exits cleanly
+        # instead of crashing. The awaiting coroutine is already gone.
+        try:
+            loop.call_soon_threadsafe(setter, value)
+        except RuntimeError:
+            pass
+
     def runner() -> None:
         try:
             result = func(**kwargs)
         except Exception as exc:
-            loop.call_soon_threadsafe(future.set_exception, exc)
+            _settle(future.set_exception, exc)
         else:
-            loop.call_soon_threadsafe(future.set_result, result)
+            _settle(future.set_result, result)
 
     threading.Thread(target=runner, daemon=True).start()
     return await future

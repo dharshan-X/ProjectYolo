@@ -105,12 +105,17 @@ def _get_embeddings_batch(texts: List[str], client: OpenAI) -> List[List[float]]
 
 def _chunk_text(text: str, chunk_size: int = 1500, overlap: int = 200) -> List[str]:
     """Split text into overlapping chunks based on characters (simple approximation)."""
+    if chunk_size <= 0:
+        chunk_size = 1500
+    # Guard: the step must be positive, otherwise `start` never advances and the
+    # loop spins forever (e.g. overlap >= chunk_size).
+    step = max(1, chunk_size - overlap)
     chunks = []
     start = 0
     while start < len(text):
         end = start + chunk_size
         chunks.append(text[start:end])
-        start = end - overlap
+        start += step
     return chunks
 
 

@@ -65,3 +65,16 @@
 {"timestamp": "2026-06-10T19:20:57.439522", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "hello"}
 {"timestamp": "2026-06-10T19:20:57.439831", "tool": "agent", "args": {"user_id": 1}, "status": "THINKING", "detail": "Consulting LLM..."}
 {"timestamp": "2026-06-10T19:20:58.313065", "tool": "mcp_manager", "args": {"server": "leetcode"}, "status": "success", "detail": "Connected and loaded tools"}
+{"timestamp": "2026-06-16T20:33:07.581409", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "hello"}
+{"timestamp": "2026-06-16T20:33:07.581743", "tool": "agent", "args": {"user_id": 1}, "status": "THINKING", "detail": "Consulting LLM..."}
+{"timestamp": "2026-06-16T20:33:07.646383", "tool": "edit_file", "args": {"path": "g.txt"}, "status": "success", "detail": ""}
+{"timestamp": "2026-06-16T20:33:07.680583", "tool": "schedule_task", "args": {"task": "Backup database", "interval": 60}, "status": "success", "detail": ""}
+{"timestamp": "2026-06-16T20:33:07.680729", "tool": "schedule_daily_task", "args": {"task": "Daily report", "interval": 1440}, "status": "success", "detail": ""}
+{"timestamp": "2026-06-16T20:33:07.680974", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}
+{"timestamp": "2026-06-16T20:33:07.681102", "tool": "cancel_scheduled_task", "args": {"id": 1, "user_id": 456}, "status": "success", "detail": ""}
+{"timestamp": "2026-06-16T20:33:07.681219", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}
+{"timestamp": "2026-06-16T20:33:09.132395", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "pattern": "matching message", "timeout": 1}, "status": "info", "detail": ""}
+{"timestamp": "2026-06-16T20:33:09.133340", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "pattern": "matches here", "timeout": 3}, "status": "info", "detail": ""}
+{"timestamp": "2026-06-16T20:33:10.135270", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "status": "matched"}, "status": "success", "detail": ""}
+{"timestamp": "2026-06-16T20:33:10.192856", "tool": "adjust_rate_limiting", "args": {"rpm_limit": 50}, "status": "success", "detail": "Rate limit set to 50 RPM"}
+{"timestamp": "2026-06-16T20:33:10.194922", "tool": "gui_mouse_click", "args": {"button": "left", "clicks": 1, "x": 805, "y": 801}, "status": "success", "detail": "Mouse clicked at (805, 801)"}
