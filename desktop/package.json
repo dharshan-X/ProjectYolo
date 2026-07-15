@@ -4,8 +4,8 @@
   "description": "Yolo — Desktop Chat Interface",
   "main": "main.js",
   "scripts": {
-    "start": "electron32 .",
-    "dev": "electron32 . --dev",
+    "start": "electron .",
+    "dev": "electron . --dev",
     "bridge": "python3 api_bridge.py"
   },
   "author": "Project Yolo",

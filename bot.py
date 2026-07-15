@@ -10,6 +10,7 @@ from typing import Any, Optional
 
 import telegram.error
 from colorama import Fore, Style, init
+
 from tools.settings import load_settings
 
 # Silence PTB DeprecationWarning by opting into future behavior
@@ -47,18 +48,7 @@ VERBOSE = os.getenv("VERBOSE", "false").lower() == "true"
 TIMEOUT_MINUTES = int(os.getenv("SESSION_TIMEOUT_MINUTES", "60"))
 
 
-def _get_int_env(name: str, default: int, min_value: int = 1) -> int:
-    raw = os.getenv(name)
-    if not raw:
-        return default
-    try:
-        value = int(raw)
-    except ValueError:
-        return default
-    if value < min_value:
-        return default
-    return value
-
+from tools.base import _get_int_env
 
 MAX_TELEGRAM_UPLOAD_BYTES = _get_int_env("MAX_TELEGRAM_UPLOAD_BYTES", 25 * 1024 * 1024)
 
@@ -100,6 +90,7 @@ def log_bot(user_id: int, tag: str, message: str, color: str = Fore.CYAN):
         )
     # Also log to audit file for TUI visibility
     from tools.base import audit_log
+
     audit_log("bot", {"user_id": user_id}, tag, message)
 
 
@@ -225,11 +216,12 @@ async def prepare_native_multi_modal(
 ) -> Any:
     """Prepare a native multi-modal message part list if model supports it."""
     from llm_router import load_llm_config
+
     config = load_llm_config()
-    
+
     native_vision = config.supports_vision()
     native_audio = config.supports_audio()
-    
+
     parts = []
     if caption:
         parts.append({"type": "text", "text": caption})
@@ -237,46 +229,83 @@ async def prepare_native_multi_modal(
     try:
         data = media_path.read_bytes()
         b64 = base64.b64encode(data).decode("utf-8")
-        
+
         if media_type.startswith("image/"):
             if native_vision:
-                parts.append({
-                    "type": "image_url",
-                    "image_url": {"url": f"data:{media_type};base64,{b64}"}
-                })
+                parts.append(
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:{media_type};base64,{b64}"},
+                    }
+                )
             else:
-                parts.append({"type": "text", "text": f"\n\n[Omitted Image: {original_name}. Native vision not supported by current model.]"})
+                parts.append(
+                    {
+                        "type": "text",
+                        "text": f"\n\n[Omitted Image: {original_name}. Native vision not supported by current model.]",
+                    }
+                )
         elif media_type.startswith("audio/"):
             if native_audio:
                 fmt = media_type.split("/")[1]
-                if fmt == "oga": fmt = "ogg" # Telegram voice notes
-                parts.append({
-                    "type": "input_audio",
-                    "input_audio": {"data": b64, "format": fmt}
-                })
+                if fmt == "oga":
+                    fmt = "ogg"  # Telegram voice notes
+                parts.append(
+                    {"type": "input_audio", "input_audio": {"data": b64, "format": fmt}}
+                )
             else:
-                parts.append({"type": "text", "text": f"\n\n[Omitted Audio: {original_name}. Native audio not supported by current model.]"})
+                parts.append(
+                    {
+                        "type": "text",
+                        "text": f"\n\n[Omitted Audio: {original_name}. Native audio not supported by current model.]",
+                    }
+                )
         elif media_path.suffix.lower() in (".pdf", ".docx", ".pptx", ".xlsx", ".md"):
             from tools.document_parser import extract_text_from_file
+
             parsed_text = extract_text_from_file(media_path)
-            parts.append({"type": "text", "text": f"\n\nFile `{original_name}` content:\n{parsed_text}"})
+            parts.append(
+                {
+                    "type": "text",
+                    "text": f"\n\nFile `{original_name}` content:\n{parsed_text}",
+                }
+            )
         else:
             if len(data) < 50000:
                 try:
                     text_content = data.decode("utf-8")
-                    parts.append({"type": "text", "text": f"\n\nFile `{original_name}` content:\n{text_content}"})
+                    parts.append(
+                        {
+                            "type": "text",
+                            "text": f"\n\nFile `{original_name}` content:\n{text_content}",
+                        }
+                    )
                 except Exception:
-                    parts.append({"type": "text", "text": f"\n\n[Omitted File: {original_name}. Binary type {media_type}]"})
+                    parts.append(
+                        {
+                            "type": "text",
+                            "text": f"\n\n[Omitted File: {original_name}. Binary type {media_type}]",
+                        }
+                    )
             else:
-                parts.append({"type": "text", "text": f"\n\n[Omitted File: {original_name}. Too large for direct text context.]"})
-                
+                parts.append(
+                    {
+                        "type": "text",
+                        "text": f"\n\n[Omitted File: {original_name}. Too large for direct text context.]",
+                    }
+                )
+
     except Exception as e:
-        parts.append({"type": "text", "text": f"\n\n[Error reading attachment {original_name}: {e}]"})
+        parts.append(
+            {
+                "type": "text",
+                "text": f"\n\n[Error reading attachment {original_name}: {e}]",
+            }
+        )
 
     if len(parts) == 1 and parts[0]["type"] == "text":
         return parts[0]["text"]
     return parts
-
 
 
 async def process_uploaded_artifact(
@@ -297,14 +326,14 @@ async def process_uploaded_artifact(
     )
 
     mime_type = mimetypes.guess_type(str(local_path))[0] or "application/octet-stream"
-    user_msg = await prepare_native_multi_modal(caption, local_path, mime_type, original_name)
+    user_msg = await prepare_native_multi_modal(
+        caption, local_path, mime_type, original_name
+    )
     await process_agent_turn(update, context, user_msg)
-
 
     # Acknowledgement
     assert update.message is not None
     await update.message.reply_text(f"✅ Upload processed: `{original_name}`")
-
 
 
 async def auth_check(update: Update) -> bool:
@@ -321,12 +350,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     assert update.effective_user is not None
     user_id = update.effective_user.id
-    session_manager.clear(user_id)
+    async with session_manager.get_lock(user_id):
+        session_manager.clear(user_id)
     log_bot(user_id, "IN", "/start", Fore.CYAN)
 
-    welcome = (
-        "*Welcome to Yolo\\!*\n\n"
-    )
+    welcome = "*Welcome to Yolo\\!*\n\n"
     assert update.message is not None
     await update.message.reply_text(welcome, parse_mode=ParseMode.MARKDOWN_V2)
 
@@ -704,7 +732,9 @@ async def tools_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         name = escape_markdown(tool_schema["function"]["name"])  # type: ignore
         desc = escape_markdown(tool_schema["function"]["description"])  # type: ignore
         tools_list += f"• `{name}`: {desc}\n"
-    await send_long_message((update.effective_chat.id if update.effective_chat else 0), tools_list, context)
+    await send_long_message(
+        (update.effective_chat.id if update.effective_chat else 0), tools_list, context
+    )
 
 
 async def experiences_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -719,7 +749,9 @@ async def experiences_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         from tools.experience_ops import list_experiences
 
         result = list_experiences(user_id)
-        await send_long_message((update.effective_chat.id if update.effective_chat else 0), result, context)
+        await send_long_message(
+            (update.effective_chat.id if update.effective_chat else 0), result, context
+        )
     except Exception as e:
         assert update.message is not None
         await update.message.reply_text(f"Error: {e}")
@@ -737,7 +769,9 @@ async def schedules_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         from tools.cron_ops import get_scheduled_tasks
 
         result = get_scheduled_tasks(user_id)
-        await send_long_message((update.effective_chat.id if update.effective_chat else 0), result, context)
+        await send_long_message(
+            (update.effective_chat.id if update.effective_chat else 0), result, context
+        )
     except Exception as e:
         assert update.message is not None
         await update.message.reply_text(f"Error: {e}")
@@ -754,7 +788,9 @@ async def memories_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         from tools.memory_ops import memory_list
 
         result = memory_list(user_id)
-        await send_long_message((update.effective_chat.id if update.effective_chat else 0), result, context)
+        await send_long_message(
+            (update.effective_chat.id if update.effective_chat else 0), result, context
+        )
     except Exception as e:
         assert update.message is not None
         await update.message.reply_text(f"Error: {e}")
@@ -790,9 +826,11 @@ async def facts_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         facts_list = list(agent.extract_auto_basic_facts(content))
         if not facts_list:
             assert update.message is not None
-            await update.message.reply_text("No auto basic facts are currently injected.")
+            await update.message.reply_text(
+                "No auto basic facts are currently injected."
+            )
             return
-        lines = [f"{i+1}. {fact}" for i, fact in enumerate(facts_list)]
+        lines = [f"{i + 1}. {fact}" for i, fact in enumerate(facts_list)]
         await send_long_message(
             (update.effective_chat.id if update.effective_chat else 0),
             "### Auto Basic Facts\n\n" + "\n".join(lines),
@@ -832,7 +870,8 @@ async def get_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if resolved.is_file():
             with open(resolved, "rb") as doc:
                 await context.bot.send_document(
-                    chat_id=(update.effective_chat.id if update.effective_chat else 0), document=doc
+                    chat_id=(update.effective_chat.id if update.effective_chat else 0),
+                    document=doc,
                 )
         else:
             assert update.message is not None
@@ -851,7 +890,7 @@ async def process_agent_turn(
     async with session_manager.get_lock(user_id):
         session = session_manager.get_or_create(user_id)
         assert update.effective_chat is not None
-        chat_id = (update.effective_chat.id if update.effective_chat else 0)
+        chat_id = update.effective_chat.id if update.effective_chat else 0
         telegram_signal_handler = build_telegram_signal_handler(context, chat_id)
 
         try:
@@ -877,7 +916,7 @@ async def process_agent_turn(
             lines = [f"⚠️ *{count} Actions Pending Confirmation*"]
             for i, p in enumerate(session.pending_confirmations):
                 lines.append(
-                    f"{i+1}\\. `{escape_markdown(p['action'])}` on `{escape_markdown(p['path'])}`"
+                    f"{i + 1}\\. `{escape_markdown(p['action'])}` on `{escape_markdown(p['path'])}`"
                 )
 
             assert update.message is not None
@@ -892,7 +931,9 @@ async def process_agent_turn(
             logger.exception("Error in process_agent_turn")
             try:
                 if update.message:
-                    await update.message.reply_text("⚠️ An internal error occurred. Please try again.")
+                    await update.message.reply_text(
+                        "⚠️ An internal error occurred. Please try again."
+                    )
                 elif update.effective_chat:
                     await context.bot.send_message(
                         chat_id=update.effective_chat.id,
@@ -966,7 +1007,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             lines = [f"⚠️ *{count} Actions Pending Confirmation*"]
             for i, p in enumerate(confirmations):
                 lines.append(
-                    f"{i+1}\\. `{escape_markdown(p['action'])}` on `{escape_markdown(p['path'])}`"
+                    f"{i + 1}\\. `{escape_markdown(p['action'])}` on `{escape_markdown(p['path'])}`"
                 )
 
             await context.bot.send_message(
@@ -977,14 +1018,22 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
 
         pending_list = list(session.pending_confirmations)
-        
+
         if query.data == "confirm_all":
             await _safe_edit_callback_message("✅ *All Actions Confirmed*")
             try:
                 response = await agent.resolve_confirmations(
-                    session, user_id, signal_handler=telegram_signal_handler, confirm_all=True
+                    session,
+                    user_id,
+                    signal_handler=telegram_signal_handler,
+                    confirm_all=True,
+                    memory_service=session_manager.memory,
                 )
-                await send_long_message((update.effective_chat.id if update.effective_chat else 0), response, context)
+                await send_long_message(
+                    (update.effective_chat.id if update.effective_chat else 0),
+                    response,
+                    context,
+                )
                 session_manager.save(user_id)
             except agent.PendingConfirmationError:
                 await send_confirmation_prompt(
@@ -994,22 +1043,33 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception:
                 logger.exception("Error in confirm_all callback flow")
                 await context.bot.send_message(
-                    (update.effective_chat.id if update.effective_chat else 0), "One or more tools failed\\."
+                    (update.effective_chat.id if update.effective_chat else 0),
+                    "One or more tools failed\\.",
                 )
                 session_manager.save(user_id)
-        
+
         elif query.data == "confirm":
             if not pending_list:
                 await _safe_edit_callback_message("ℹ️ *No Pending Actions*")
                 return
-            
+
             p = pending_list[0]
-            await _safe_edit_callback_message(f"✅ *Action Confirmed*: `{escape_markdown(p['action'])}`")
+            await _safe_edit_callback_message(
+                f"✅ *Action Confirmed*: `{escape_markdown(p['action'])}`"
+            )
             try:
                 response = await agent.resolve_confirmations(
-                    session, user_id, signal_handler=telegram_signal_handler, confirm_all=False
+                    session,
+                    user_id,
+                    signal_handler=telegram_signal_handler,
+                    confirm_all=False,
+                    memory_service=session_manager.memory,
                 )
-                await send_long_message((update.effective_chat.id if update.effective_chat else 0), response, context)
+                await send_long_message(
+                    (update.effective_chat.id if update.effective_chat else 0),
+                    response,
+                    context,
+                )
                 session_manager.save(user_id)
             except agent.PendingConfirmationError:
                 await send_confirmation_prompt(
@@ -1019,14 +1079,15 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception:
                 logger.exception("Error in confirm callback flow")
                 await context.bot.send_message(
-                    (update.effective_chat.id if update.effective_chat else 0), "Tool execution failed\\."
+                    (update.effective_chat.id if update.effective_chat else 0),
+                    "Tool execution failed\\.",
                 )
                 session_manager.save(user_id)
 
         elif query.data == "deny_all":
             await agent.deny_confirmations(session, deny_all=True)
             await _safe_edit_callback_message("❌ *All Actions Cancelled*")
-            
+
             try:
                 response = await agent.run_agent_turn(
                     None,
@@ -1034,7 +1095,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     signal_handler=telegram_signal_handler,
                     memory_service=session_manager.memory,
                 )
-                await send_long_message((update.effective_chat.id if update.effective_chat else 0), response, context)
+                await send_long_message(
+                    (update.effective_chat.id if update.effective_chat else 0),
+                    response,
+                    context,
+                )
                 session_manager.save(user_id)
             except agent.PendingConfirmationError:
                 await send_confirmation_prompt(
@@ -1044,19 +1109,22 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception:
                 logger.exception("Error in deny_all callback flow")
                 await context.bot.send_message(
-                    (update.effective_chat.id if update.effective_chat else 0), "Turn failed after denial\\."
+                    (update.effective_chat.id if update.effective_chat else 0),
+                    "Turn failed after denial\\.",
                 )
                 session_manager.save(user_id)
-        
+
         elif query.data == "deny":
             if not pending_list:
                 await _safe_edit_callback_message("ℹ️ *No Pending Actions*")
                 return
-                
+
             p = pending_list[0]
             await agent.deny_confirmations(session, deny_all=False)
-            await _safe_edit_callback_message(f"❌ *Action Denied*: `{escape_markdown(p['action'])}`")
-            
+            await _safe_edit_callback_message(
+                f"❌ *Action Denied*: `{escape_markdown(p['action'])}`"
+            )
+
             try:
                 response = await agent.run_agent_turn(
                     None,
@@ -1064,7 +1132,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     signal_handler=telegram_signal_handler,
                     memory_service=session_manager.memory,
                 )
-                await send_long_message((update.effective_chat.id if update.effective_chat else 0), response, context)
+                await send_long_message(
+                    (update.effective_chat.id if update.effective_chat else 0),
+                    response,
+                    context,
+                )
                 session_manager.save(user_id)
             except agent.PendingConfirmationError:
                 await send_confirmation_prompt(
@@ -1074,7 +1146,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception:
                 logger.exception("Error in deny callback flow")
                 await context.bot.send_message(
-                    (update.effective_chat.id if update.effective_chat else 0), "Turn failed after denial\\."
+                    (update.effective_chat.id if update.effective_chat else 0),
+                    "Turn failed after denial\\.",
                 )
                 session_manager.save(user_id)
         else:
@@ -1085,9 +1158,9 @@ async def send_long_message(
     chat_id: int,
     text: str,
     context: ContextTypes.DEFAULT_TYPE = None,
-    bot = None,
+    bot=None,
     parse_mode: str = ParseMode.MARKDOWN,
-    reply_markup = None,
+    reply_markup=None,
 ):
     """Send message with automatic chunking and Markdown fallback."""
     if not text:
@@ -1097,11 +1170,13 @@ async def send_long_message(
         if context is not None:
             bot = context.bot
         else:
-            raise ValueError("Either context or bot must be provided to send_long_message")
+            raise ValueError(
+                "Either context or bot must be provided to send_long_message"
+            )
 
     parts = [text[i : i + 4000] for i in range(0, len(text), 4000)]
     for idx, part in enumerate(parts):
-        is_last = (idx == len(parts) - 1)
+        is_last = idx == len(parts) - 1
         current_reply_markup = reply_markup if is_last else None
         markdown_sent = False
         try:
@@ -1134,7 +1209,9 @@ async def send_long_message(
                 )
                 markdown_sent = True
             except Exception as retry_error:
-                logger.warning(f"Retry send failed, trying plain text fallback: {retry_error}")
+                logger.warning(
+                    f"Retry send failed, trying plain text fallback: {retry_error}"
+                )
         except telegram.error.BadRequest as e:
             logger.warning(f"Markdown failed, falling back to plain text: {e}")
         except Exception as e:
@@ -1171,7 +1248,9 @@ async def send_long_message(
                     reply_markup=current_reply_markup,
                 )
             except Exception as retry_plain_error:
-                logger.error(f"Failed to send plain text after retry: {retry_plain_error}")
+                logger.error(
+                    f"Failed to send plain text after retry: {retry_plain_error}"
+                )
         except Exception as plain_error:
             logger.error(f"Failed to send plain text message: {plain_error}")
 
@@ -1186,9 +1265,12 @@ async def post_init(application: Application) -> None:
     if os.getenv("ENABLE_DESKTOP_BRIDGE", "true").lower() == "true":
         try:
             from desktop.api_bridge import run_desktop_bridge
-            task_bridge = asyncio.create_task(run_desktop_bridge(
-                shared_session_manager=session_manager,
-            ))
+
+            task_bridge = asyncio.create_task(
+                run_desktop_bridge(
+                    shared_session_manager=session_manager,
+                )
+            )
             _background_tasks.add(task_bridge)
             task_bridge.add_done_callback(_background_tasks.discard)
         except Exception as e:
@@ -1217,7 +1299,7 @@ async def post_init(application: Application) -> None:
 
                     for idx, r_part in enumerate(res_parts):
                         suffix = (
-                            f" (Part {idx+1}/{len(res_parts)})"
+                            f" (Part {idx + 1}/{len(res_parts)})"
                             if len(res_parts) > 1
                             else ""
                         )
@@ -1228,15 +1310,25 @@ async def post_init(application: Application) -> None:
                             )
                             delivered = True
                         except telegram.error.RetryAfter as e:
-                            delay = float(e.retry_after.total_seconds()) if hasattr(e.retry_after, "total_seconds") else float(e.retry_after)
-                            logger.warning(f"Flood control in notification_worker, sleeping {delay}s")
+                            delay = (
+                                float(e.retry_after.total_seconds())
+                                if hasattr(e.retry_after, "total_seconds")
+                                else float(e.retry_after)
+                            )
+                            logger.warning(
+                                f"Flood control in notification_worker, sleeping {delay}s"
+                            )
                             await asyncio.sleep(delay)
                             # Retry this specific part
                             try:
-                                await application.bot.send_message(chat_id=uid, text=msg, parse_mode=ParseMode.MARKDOWN_V2)
+                                await application.bot.send_message(
+                                    chat_id=uid,
+                                    text=msg,
+                                    parse_mode=ParseMode.MARKDOWN_V2,
+                                )
                                 delivered = True
                             except Exception:
-                                pass # Fallback to plain below
+                                pass  # Fallback to plain below
                         except telegram.error.BadRequest:
                             # Markdown parse errors or length issues are recoverable via plain text fallback.
                             plain_msg = f"🔔 Mission Update{suffix}\nID: {tid}\nObjective: {obj}\nStatus: {stat.upper()}\n\nResult: {r_part}"
@@ -1249,7 +1341,11 @@ async def post_init(application: Application) -> None:
                                 )
                                 delivered = True
                             except telegram.error.RetryAfter as re:
-                                delay = float(re.retry_after.total_seconds()) if hasattr(re.retry_after, "total_seconds") else float(re.retry_after)
+                                delay = (
+                                    float(re.retry_after.total_seconds())
+                                    if hasattr(re.retry_after, "total_seconds")
+                                    else float(re.retry_after)
+                                )
                                 await asyncio.sleep(delay)
                             except telegram.error.BadRequest as plain_err:
                                 if "chat not found" in str(plain_err).lower():
@@ -1348,7 +1444,9 @@ async def post_init(application: Application) -> None:
                                     parse_mode=ParseMode.MARKDOWN_V2,
                                 )
 
-                    task_cron = asyncio.create_task(run_cron_task(cid, uid, desc, interval))
+                    task_cron = asyncio.create_task(
+                        run_cron_task(cid, uid, desc, interval)
+                    )
                     _background_tasks.add(task_cron)
                     task_cron.add_done_callback(_background_tasks.discard)
                     update_cron_run(cid, interval)
@@ -1391,6 +1489,12 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 def main():
+    if not ALLOWED_USER_IDS:
+        logger.error(
+            "TELEGRAM_ALLOWED_USER_IDS is empty or not set in configuration. Refusing to start for safety."
+        )
+        sys.exit(1)
+
     request = HTTPXRequest(connect_timeout=30.0, read_timeout=30.0)
     application = (
         ApplicationBuilder().token(TOKEN).post_init(post_init).request(request).build()
@@ -1444,13 +1548,18 @@ def main():
         try:
             application.run_polling()
         finally:
-            # Graceful shutdown: cancel background missions and close DB
+            # Graceful shutdown: cancel background missions, clean up MCP, and close DB
             from tools.background_ops import cancel_all_background_tasks
             from tools.database_ops import close_db
-            asyncio.run(cancel_all_background_tasks())
+            from tools.mcp_manager import mcp_manager
+
+            async def shutdown_cleanup():
+                await cancel_all_background_tasks()
+                await mcp_manager.cleanup()
+
+            asyncio.run(shutdown_cleanup())
             close_db()
 
 
 if __name__ == "__main__":
     main()
-

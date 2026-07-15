@@ -260,7 +260,7 @@ def save_session(
         """,
             (
                 user_id,
-                json.dumps(history),
+                json.dumps(history, default=str),
                 yolo_mode,
                 think_mode,
                 think_mode_policy,

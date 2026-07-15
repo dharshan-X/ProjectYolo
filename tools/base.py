@@ -4,6 +4,23 @@ import os
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Union
 
+def _get_int_env(name: str, default: int, min_value: int = 1) -> int:
+    """Retrieve an integer environment variable, warning on invalid formatting."""
+    raw = os.getenv(name)
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        import sys
+        sys.stderr.write(f"Warning: Environment variable '{name}' has invalid integer value '{raw}'. Using default: {default}\n")
+        return default
+    if value < min_value:
+        import sys
+        sys.stderr.write(f"Warning: Environment variable '{name}' value {value} is less than minimum {min_value}. Using default: {default}\n")
+        return default
+    return value
+
 # Disable mem0 telemetry to prevent local qdrant concurrent access errors (migrations_qdrant lock)
 os.environ["MEM0_TELEMETRY"] = "false"
 

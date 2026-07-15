@@ -7,42 +7,43 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 from colorama import Fore, init
-from tools.settings import load_settings
 
 import tools
-from tools.base import YOLO_HOME
 from llm_router import LLMRouter, load_llm_config
+from prompt_builder import (
+    EXPERIENCE_UPDATE_SYSTEM_DIRECTIVE,
+    GUI_PERCEPTION_DIRECTIVE,
+    SELF_UPGRADE_SYSTEM_DIRECTIVE,
+    THINK_MODE_SYSTEM_DIRECTIVE,
+    PendingConfirmationError,
+    _build_memory_context,
+    _collect_run_bash_commands,
+    _collect_turn_tool_names,
+    _compact_history,
+    _extract_tool_path,
+    _fetch_all_memories,
+    _is_complex_task_prompt,
+    _is_destructive_or_sensitive_tool,
+    _is_experience_update_request,
+    _is_gui_interaction_request,
+    _is_out_of_scope,
+    _is_self_upgrade_request,
+    _is_small_model_name,
+    _merge_memory_context_into_system_prompt,
+    _missing_self_upgrade_phases,
+    _normalize_single_system_message,
+    _repo_has_tests,
+    _set_turn_directives,
+    _sync_basic_facts_into_system_prompt,
+    get_initial_messages,
+    log_agent,
+)
 from session import Session
 from tool_dispatcher import execute_tool_direct, sanitize_history
-
-from prompt_builder import (
-    get_initial_messages,
-    _normalize_single_system_message,
-    _fetch_all_memories,
-    _sync_basic_facts_into_system_prompt,
-    _is_complex_task_prompt,
-    _inject_system_directive,
-    THINK_MODE_SYSTEM_DIRECTIVE,
-    _build_memory_context,
-    _merge_memory_context_into_system_prompt,
-    _is_self_upgrade_request,
-    SELF_UPGRADE_SYSTEM_DIRECTIVE,
-    _is_experience_update_request,
-    EXPERIENCE_UPDATE_SYSTEM_DIRECTIVE,
-    log_agent,
-    _is_gui_interaction_request,
-    GUI_PERCEPTION_DIRECTIVE,
-    _is_out_of_scope,
-    _is_destructive_or_sensitive_tool,
-    _extract_tool_path,
-    PendingConfirmationError,
-    _compact_history,
-    _collect_turn_tool_names,
-    _collect_run_bash_commands,
-    _missing_self_upgrade_phases,
-    _repo_has_tests,
-)
+from tools.base import YOLO_HOME
 from tools.mcp_manager import mcp_manager
+from tools.settings import load_settings
+
 
 class TUIMessage:
     STREAM = "__STREAM__"
@@ -51,10 +52,12 @@ class TUIMessage:
     TOOL_RESULT = "__TOOL_RESULT__"
     DONE = "__DONE__"
 
+
 init(autoreset=True)
 load_settings()
 
 VERBOSE = os.getenv("VERBOSE", "false").lower() == "true"
+
 
 def _get_router() -> LLMRouter:
     """Helper to load configuration and return a router instance."""
@@ -63,7 +66,9 @@ def _get_router() -> LLMRouter:
         raise ValueError("No LLM model configured.")
     return LLMRouter(config)
 
+
 router = _get_router()
+
 
 def reload_router():
     """Manually reload the global router (useful for tests or env changes)."""
@@ -73,14 +78,19 @@ def reload_router():
 
 def _get_active_router(session: Session) -> LLMRouter:
     """Get the correct LLMRouter instance for the session."""
-    if getattr(session, "llm_model", None):
+    session_model = getattr(session, "llm_model", None)
+    if session_model:
         config = load_llm_config()
-        config.model = session.llm_model
+        config.model = session_model
         return LLMRouter(config)
     return router
+
+
 AUTO_COMPACT_THRESHOLD = int(os.getenv("AUTO_COMPACT_THRESHOLD", "40"))
 _LOCAL_PROMPTS_DIR = Path(__file__).resolve().parent / "configs" / "prompts"
-PROMPTS_DIR = (YOLO_HOME / "prompts") if (YOLO_HOME / "prompts").is_dir() else _LOCAL_PROMPTS_DIR
+PROMPTS_DIR = (
+    (YOLO_HOME / "prompts") if (YOLO_HOME / "prompts").is_dir() else _LOCAL_PROMPTS_DIR
+)
 
 
 def _append_tool_result(
@@ -107,79 +117,94 @@ def _turn_state(user_msg: Optional[Any], session: Session, memory_service: Any) 
         "self_upgrade_start_index": len(session.message_history),
         "experience_update_active": False,
         "experience_update_start_index": len(session.message_history),
+        "turn_start_index": len(session.message_history),
+        "original_user_msg": None,
+        "directives": [],
     }
 
     if not session.message_history:
-        session.message_history = get_initial_messages()
+        profile = None
+        session_model = getattr(session, "llm_model", None)
+        if session_model:
+            profile = "compact" if _is_small_model_name(session_model) else "verbose"
+        session.message_history = get_initial_messages(profile=profile)
 
     _normalize_single_system_message(session)
 
     all_memories = (
         _fetch_all_memories(memory_service, session.user_id) if memory_service else []
     )
-
     _sync_basic_facts_into_system_prompt(
         session, memory_service, all_results=all_memories
     )
 
-    if getattr(session, "think_mode_policy", "auto") == "auto" and user_msg is not None:
-        session.think_mode = _is_complex_task_prompt(user_msg)
+    if user_msg is not None:
+        if getattr(session, "think_mode_policy", "auto") == "auto":
+            session.think_mode = _is_complex_task_prompt(user_msg)
 
-    if getattr(session, "think_mode", False):
-        _inject_system_directive(session, THINK_MODE_SYSTEM_DIRECTIVE)
+        directives: list[str] = []
+        if getattr(session, "think_mode", False):
+            directives.append(THINK_MODE_SYSTEM_DIRECTIVE)
 
-    if user_msg:
         memory_context = _build_memory_context(
             memory_service, session.user_id, user_msg, all_results=all_memories
         )
         _merge_memory_context_into_system_prompt(session, memory_context)
-        
-        # Skill Discovery & Strategy Nudge
-        if getattr(session, "llm_call_count", 0) > 0 and session.llm_call_count % 15 == 0:
-            nudge_directive = (
-                "\n[System note: You have been iterating on this task for a while. "
-                "If you feel stuck or are repeating the same generic bash commands, "
-                "remember to utilize your advanced tools: delegate to subagents, "
-                "search for specialized skills, or read logs/memory comprehensively.]"
-            )
-            _inject_system_directive(session, nudge_directive)
+
+        state["turn_start_index"] = len(session.message_history)
+        state["original_user_msg"] = user_msg
 
         if _is_self_upgrade_request(user_msg):
             state["self_upgrade_active"] = True
-            _inject_system_directive(session, SELF_UPGRADE_SYSTEM_DIRECTIVE)
-            state["self_upgrade_start_index"] = len(session.message_history)
+            state["self_upgrade_start_index"] = state["turn_start_index"]
+            directives.append(SELF_UPGRADE_SYSTEM_DIRECTIVE)
 
         if _is_experience_update_request(user_msg):
             state["experience_update_active"] = True
-            _inject_system_directive(session, EXPERIENCE_UPDATE_SYSTEM_DIRECTIVE)
-            state["experience_update_start_index"] = len(session.message_history)
+            state["experience_update_start_index"] = state["turn_start_index"]
+            directives.append(EXPERIENCE_UPDATE_SYSTEM_DIRECTIVE)
 
+        if _is_gui_interaction_request(user_msg):
+            directives.append(GUI_PERCEPTION_DIRECTIVE)
+
+        state["directives"] = directives
+        _set_turn_directives(session, directives)
         session.message_history.append({"role": "user", "content": user_msg})
         session.mark_dirty()
         log_agent(session.user_id, "IN", user_msg, Fore.CYAN)
-
-        if _is_gui_interaction_request(user_msg):
-            _inject_system_directive(session, GUI_PERCEPTION_DIRECTIVE)
     else:
-        # Recover state if resuming without a new user message
-        if session.message_history and session.message_history[0].get("role") == "system":
+        # Preserve the active turn's managed directives while resuming after HITL.
+        if (
+            session.message_history
+            and session.message_history[0].get("role") == "system"
+        ):
             sys_content = session.message_history[0].get("content") or ""
-            if SELF_UPGRADE_SYSTEM_DIRECTIVE in sys_content:
-                state["self_upgrade_active"] = True
-                for i in range(len(session.message_history) - 1, -1, -1):
-                    msg = session.message_history[i]
-                    content = msg.get("content") or ""
-                    if msg.get("role") == "user" and _is_self_upgrade_request(content):
-                        state["self_upgrade_start_index"] = i
-                        break
-            if EXPERIENCE_UPDATE_SYSTEM_DIRECTIVE in sys_content:
-                state["experience_update_active"] = True
-                for i in range(len(session.message_history) - 1, -1, -1):
-                    msg = session.message_history[i]
-                    content = msg.get("content") or ""
-                    if msg.get("role") == "user" and _is_experience_update_request(content):
-                        state["experience_update_start_index"] = i
-                        break
+            state["directives"] = [
+                directive
+                for directive in (
+                    THINK_MODE_SYSTEM_DIRECTIVE,
+                    SELF_UPGRADE_SYSTEM_DIRECTIVE,
+                    EXPERIENCE_UPDATE_SYSTEM_DIRECTIVE,
+                    GUI_PERCEPTION_DIRECTIVE,
+                )
+                if directive in sys_content
+            ]
+            for i in range(len(session.message_history) - 1, -1, -1):
+                msg = session.message_history[i]
+                if msg.get("role") != "user":
+                    continue
+                content = msg.get("content")
+                if state["original_user_msg"] is None:
+                    state["original_user_msg"] = content
+                    state["turn_start_index"] = i
+                if _is_self_upgrade_request(content):
+                    state["self_upgrade_active"] = True
+                    state["self_upgrade_start_index"] = i
+                if _is_experience_update_request(content):
+                    state["experience_update_active"] = True
+                    state["experience_update_start_index"] = i
+                if state["self_upgrade_active"] and state["experience_update_active"]:
+                    break
 
     _normalize_single_system_message(session)
     return state
@@ -195,15 +220,28 @@ def _find_unanswered_tool_calls(session: Session) -> list[dict]:
             assistant_idx = i
             break
 
-    if assistant_msg is None:
+    if assistant_msg is None or assistant_idx is None:
+        return []
+
+    following = session.message_history[assistant_idx + 1 :]
+    if any(message.get("role") != "tool" for message in following):
+        return []
+
+    tool_calls = assistant_msg.get("tool_calls") or []
+    call_ids = [tc.get("id") for tc in tool_calls if isinstance(tc, dict)]
+    if (
+        len(call_ids) != len(tool_calls)
+        or any(not isinstance(call_id, str) or not call_id for call_id in call_ids)
+        or len(set(call_ids)) != len(call_ids)
+    ):
         return []
 
     answered = {
-        m["tool_call_id"]
-        for m in session.message_history[assistant_idx + 1:]
-        if m.get("role") == "tool"
+        message.get("tool_call_id")
+        for message in following
+        if message.get("role") == "tool"
     }
-    return [tc for tc in assistant_msg["tool_calls"] if tc["id"] not in answered]
+    return [tc for tc in tool_calls if tc["id"] not in answered]
 
 
 def _is_nested_background_mission(session: Session, func_name: str) -> bool:
@@ -240,16 +278,17 @@ async def _execute_unanswered_tool_calls(
     for tool_call in unanswered:
         func_name = tool_call["function"]["name"]
         tc_id = tool_call["id"]
+        raw_arguments = tool_call.get("function", {}).get("arguments", "{}")
         try:
-            args = json.loads(
-                tool_call["function"].get("arguments", "{}"),
-                strict=False,
-            )
-        except Exception:
-            args = {}
+            args = json.loads(raw_arguments, strict=False)
+        except Exception as exc:
+            args = {"_invalid_json": raw_arguments, "_error": str(exc)}
 
         if not isinstance(args, dict):
-            args = {}
+            args = {
+                "_invalid_json": raw_arguments,
+                "_error": "tool arguments must decode to a JSON object",
+            }
 
         if "_invalid_json" in args:
             res = f"Error: Your tool call arguments were not valid JSON. Exception: {args.get('_error')}\nYou sent: {args.get('_invalid_json')}\nPlease fix your JSON syntax (e.g. properly escape newlines as \\n and quotes) and try again."
@@ -268,7 +307,9 @@ async def _execute_unanswered_tool_calls(
             continue
 
         out_of_scope = _is_out_of_scope(args)
-        if (_is_destructive_or_sensitive_tool(func_name) or out_of_scope) and not session.yolo_mode:
+        if (
+            _is_destructive_or_sensitive_tool(func_name) or out_of_scope
+        ) and not session.yolo_mode:
             _append_tool_result(
                 session,
                 tool_call_id=tc_id,
@@ -348,6 +389,7 @@ def _deep_merge_tool_delta(target: dict, source: dict) -> None:
 
 def _normalize_tool_calls(tool_calls_acc: list) -> list[dict]:
     valid_tool_calls = []
+    seen_ids: set[str] = set()
     for tc in tool_calls_acc:
         if not tc.get("function", {}).get("name"):
             continue
@@ -365,8 +407,11 @@ def _normalize_tool_calls(tool_calls_acc: list) -> list[dict]:
                     {"_invalid_json": tc["function"]["arguments"], "_error": str(e)}
                 )
 
-        if not tc.get("id"):
-            tc["id"] = f"call_{uuid.uuid4().hex[:12]}"
+        call_id = tc.get("id")
+        if not isinstance(call_id, str) or not call_id or call_id in seen_ids:
+            call_id = f"call_{uuid.uuid4().hex[:12]}"
+            tc["id"] = call_id
+        seen_ids.add(call_id)
 
         valid_tool_calls.append(tc)
     return valid_tool_calls
@@ -398,8 +443,12 @@ def zip_history_payload(messages: list, session: Session) -> list:
         msg_copy = dict(msg)
         content = msg_copy.get("content")
         role = msg_copy.get("role")
-        
-        if not content:
+
+        # System instructions and user requests are authoritative. Silently
+        # deleting their middle can remove safety rules, source code, or the
+        # current task's constraints. Older history is handled by compaction;
+        # request zipping is limited to verbose assistant/tool payloads.
+        if role not in {"assistant", "tool"} or not content:
             zipped.append(msg_copy)
             continue
 
@@ -411,19 +460,21 @@ def zip_history_payload(messages: list, session: Session) -> list:
                     + f"\n\n... [REQUEST ZIPPED: Truncated {original_len - (keep_head + keep_tail)} characters to avoid usage limits] ...\n\n"
                     + content[-keep_tail:]
                 )
-                from prompt_builder import log_agent
-                from colorama import Fore
                 log_agent(
                     session.user_id,
                     "ZIP",
                     f"Zipped message content of role '{role}' ({original_len} -> {len(msg_copy['content'])} chars) to avoid usage limits.",
-                    Fore.CYAN
+                    Fore.CYAN,
                 )
         elif isinstance(content, list):
             new_list = []
             changed = False
             for item in content:
-                if isinstance(item, dict) and item.get("type") == "text" and isinstance(item.get("text"), str):
+                if (
+                    isinstance(item, dict)
+                    and item.get("type") == "text"
+                    and isinstance(item.get("text"), str)
+                ):
                     text = item["text"]
                     if len(text) > threshold:
                         original_len = len(text)
@@ -436,13 +487,11 @@ def zip_history_payload(messages: list, session: Session) -> list:
                         item_copy["text"] = zipped_text
                         new_list.append(item_copy)
                         changed = True
-                        from prompt_builder import log_agent
-                        from colorama import Fore
                         log_agent(
                             session.user_id,
                             "ZIP",
                             f"Zipped multimodal text item of role '{role}' ({original_len} -> {len(zipped_text)} chars) to avoid usage limits.",
-                            Fore.CYAN
+                            Fore.CYAN,
                         )
                         continue
                 new_list.append(item)
@@ -466,7 +515,6 @@ async def _stream_llm_round(
         full_reasoning_content = ""
         tool_calls_acc: list = []
         usage = None
-        has_choices = False
         last_stream_time = 0.0
 
         try:
@@ -476,6 +524,7 @@ async def _stream_llm_round(
                 tools=current_tools,
                 tool_choice="auto",
                 stream=True,
+                thinking=getattr(session, "think_mode", False),
             )
 
             async for chunk in response:
@@ -485,7 +534,6 @@ async def _stream_llm_round(
                 if not getattr(chunk, "choices", None):
                     continue
 
-                has_choices = True
                 delta = chunk.choices[0].delta
 
                 if getattr(delta, "content", None):
@@ -503,7 +551,26 @@ async def _stream_llm_round(
 
                 if getattr(delta, "tool_calls", None):
                     for tc in delta.tool_calls:
-                        idx = getattr(tc, "index", None) or 0
+                        tc_data = tc.model_dump(exclude_none=True)
+                        idx = getattr(tc, "index", None)
+                        if idx is None:
+                            tc_id = tc_data.get("id")
+                            matching_idx = next(
+                                (
+                                    existing_idx
+                                    for existing_idx, existing in enumerate(
+                                        tool_calls_acc
+                                    )
+                                    if tc_id and existing.get("id") == tc_id
+                                ),
+                                None,
+                            )
+                            if matching_idx is not None:
+                                idx = matching_idx
+                            elif tc_id:
+                                idx = len(tool_calls_acc)
+                            else:
+                                idx = max(0, len(tool_calls_acc) - 1)
                         # Guard against a malformed delta with an absurd index
                         # causing runaway list allocation. No real response has
                         # this many parallel tool calls in a single turn.
@@ -517,12 +584,23 @@ async def _stream_llm_round(
                                     "function": {"name": "", "arguments": ""},
                                 }
                             )
-                        _deep_merge_tool_delta(
-                            tool_calls_acc[idx], tc.model_dump(exclude_none=True)
-                        )
+                        _deep_merge_tool_delta(tool_calls_acc[idx], tc_data)
 
-            if not has_choices and not usage:
-                return None, "Error: No AI response."
+            normalized_tool_calls = _normalize_tool_calls(tool_calls_acc)
+            if not full_content.strip() and not normalized_tool_calls:
+                if llm_attempt < max_llm_retries - 1:
+                    log_agent(
+                        session.user_id,
+                        "RETRY",
+                        "LLM returned an empty stream; retrying the round.",
+                        Fore.YELLOW,
+                    )
+                    await asyncio.sleep(0.25 * (llm_attempt + 1))
+                    continue
+                return (
+                    None,
+                    "Error: The AI provider returned an empty response after 3 attempts.",
+                )
 
             if full_content and signal_handler:
                 await signal_handler(f"__STREAM__:{full_content}")
@@ -531,26 +609,43 @@ async def _stream_llm_round(
             return {
                 "content": full_content,
                 "reasoning_content": full_reasoning_content,
-                "tool_calls": tool_calls_acc,
+                "tool_calls": normalized_tool_calls,
                 "usage": usage,
             }, None
 
         except Exception as e:
-            from error_classifier import classify_api_error, FailoverReason
+            from error_classifier import FailoverReason, classify_api_error
+
             classified = classify_api_error(e)
-            
+
             if classified.retryable and llm_attempt < max_llm_retries - 1:
                 if classified.reason == FailoverReason.CONTEXT_OVERFLOW:
-                    log_agent(session.user_id, "SYSTEM", "Context overflow detected. Attempting to compress context...", Fore.YELLOW)
-                    # Trigger compaction and retry immediately
+                    log_agent(
+                        session.user_id,
+                        "SYSTEM",
+                        "Context overflow detected. Attempting to compress context...",
+                        Fore.YELLOW,
+                    )
+                    before_size = len(
+                        json.dumps(session.message_history, default=str, sort_keys=True)
+                    )
                     await _compact_history(session, active_router)
+                    after_size = len(
+                        json.dumps(session.message_history, default=str, sort_keys=True)
+                    )
+                    if after_size >= before_size:
+                        return None, (
+                            "Error: The LLM context limit was exceeded and the history could not "
+                            "be compacted without dropping current instructions. Start a new "
+                            "session or shorten the current request."
+                        )
                     continue
-                    
+
                 delay = classified.recommended_delay * (llm_attempt + 1)
                 log_agent(
                     session.user_id,
                     "RETRY",
-                    f"LLM failover triggered ({classified.reason.value}). Retrying in {delay}s ({llm_attempt + 1}/{max_llm_retries})...",
+                    f"LLM request failed ({classified.reason.value}). Retrying in {delay}s ({llm_attempt + 1}/{max_llm_retries})...",
                     Fore.YELLOW,
                 )
                 if signal_handler:
@@ -566,11 +661,16 @@ async def _stream_llm_round(
 
 def _record_llm_usage(session: Session, usage: Any) -> None:
     if usage:
-        session.total_prompt_tokens += getattr(usage, "prompt_tokens", 0) or 0
-        session.total_completion_tokens += (
-            getattr(usage, "completion_tokens", 0) or 0
+        prompt_tokens = getattr(usage, "prompt_tokens", 0) or 0
+        completion_tokens = getattr(usage, "completion_tokens", 0) or 0
+        total_tokens = getattr(usage, "total_tokens", None)
+        session.total_prompt_tokens += prompt_tokens
+        session.total_completion_tokens += completion_tokens
+        session.total_tokens += (
+            total_tokens
+            if total_tokens is not None
+            else prompt_tokens + completion_tokens
         )
-        session.total_tokens += getattr(usage, "total_tokens", 0) or 0
     session.llm_call_count += 1
 
 
@@ -638,17 +738,21 @@ async def _finalize_or_request_more_work(
             session.mark_dirty()
             return None
 
-    if memory_service and user_msg:
+    memory_user_msg = (
+        user_msg if user_msg is not None else turn_state.get("original_user_msg")
+    )
+    if memory_service and memory_user_msg is not None:
         try:
             memory_service.add(
                 [
-                    {"role": "user", "content": user_msg},
+                    {"role": "user", "content": memory_user_msg},
                     {"role": "assistant", "content": full_content},
                 ],
                 user_id=str(session.user_id),
             )
         except Exception as e:
             from tools.base import audit_log
+
             audit_log("auto_memory_add", {"user_id": session.user_id}, "error", str(e))
 
     if signal_handler:
@@ -656,7 +760,9 @@ async def _finalize_or_request_more_work(
     return full_content or "Task completed."
 
 
-def _detect_tool_loop(session: Session, limit: int = 5) -> Optional[str]:
+def _detect_tool_loop(
+    session: Session, limit: int = 5, start_index: int = 0
+) -> Optional[str]:
     """Detect if the agent is stuck issuing the same tool call(s) across iterations.
 
     Each *assistant turn* is reduced to the set of its (name, arguments) tool
@@ -666,7 +772,7 @@ def _detect_tool_loop(session: Session, limit: int = 5) -> Optional[str]:
     identical calls is not mistaken for a multi-iteration loop, while alternating
     multi-tool turns are still caught.
     """
-    history = session.message_history
+    history = session.message_history[start_index:]
     if not history:
         return None
 
@@ -681,10 +787,16 @@ def _detect_tool_loop(session: Session, limit: int = 5) -> Optional[str]:
             name = func.get("name")
             if name in _SKIP:
                 continue
+            raw_args = func.get("arguments")
             try:
-                args = json.dumps(func.get("arguments"), sort_keys=True)
+                parsed_args = (
+                    json.loads(raw_args, strict=False)
+                    if isinstance(raw_args, str)
+                    else raw_args
+                )
+                args = json.dumps(parsed_args, sort_keys=True, separators=(",", ":"))
             except Exception:
-                args = str(func.get("arguments"))
+                args = str(raw_args)
             sig.add((name, args))
         if not sig:
             # Turn consisted only of polling tools — ignore, don't reset.
@@ -720,7 +832,18 @@ async def run_agent_turn(
     while agent_iterations < max_agent_iterations:
         agent_iterations += 1
 
-        loop_error = _detect_tool_loop(session)
+        if agent_iterations == 16:
+            nudge_directive = (
+                "[System note: This turn has required many model rounds. If progress has "
+                "stalled, change strategy: inspect concrete evidence, use a specialized skill, "
+                "or delegate a well-scoped subproblem instead of repeating the same action.]"
+            )
+            turn_state["directives"].append(nudge_directive)
+            _set_turn_directives(session, turn_state["directives"])
+
+        loop_error = _detect_tool_loop(
+            session, start_index=turn_state["turn_start_index"]
+        )
         if loop_error:
             log_agent(session.user_id, "WARN", loop_error, Fore.RED)
             return loop_error
@@ -760,6 +883,8 @@ async def run_agent_turn(
         )
         if error:
             return error
+        if round_result is None:
+            return "Error: The AI provider returned no usable response."
 
         _record_llm_usage(session, round_result["usage"])
         has_tool_calls = _append_assistant_round(session, round_result)
@@ -782,10 +907,11 @@ async def run_agent_turn(
 
 
 async def resolve_confirmations(
-    session: Session, 
-    user_id: int, 
+    session: Session,
+    user_id: int,
     signal_handler: Optional[Callable] = None,
-    confirm_all: bool = True
+    confirm_all: bool = True,
+    memory_service: Any = None,
 ) -> str:
     """Execute pending tool calls that were approved by the user."""
     if not session.pending_confirmations:
@@ -839,9 +965,11 @@ async def resolve_confirmations(
                 }
             )
     session.mark_dirty()
-    
+
     # After resolving, run the agent turn again to process results
-    return await run_agent_turn(None, session, signal_handler=signal_handler)
+    return await run_agent_turn(
+        None, session, signal_handler=signal_handler, memory_service=memory_service
+    )
 
 
 async def deny_confirmations(session: Session, deny_all: bool = True) -> None:
@@ -880,6 +1008,7 @@ async def deny_confirmations(session: Session, deny_all: bool = True) -> None:
 
 def main():
     import cli
+
     cli.main()
 
 

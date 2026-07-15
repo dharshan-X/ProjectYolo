@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
@@ -11,10 +12,11 @@ try:
 except Exception:
     litellm_acompletion = None
 
-import time
 import asyncio
 import random
 import threading
+import time
+
 
 class RateLimiter:
     def __init__(self, rpm_limit: int):
@@ -37,10 +39,16 @@ class RateLimiter:
                 sleep_time = self.period - (now - self.calls[0])
             # Sleep OUTSIDE the lock
             import sys
-            sys.stdout.write(f"\n[Rate Limit] Reached limit of {self.rpm_limit} requests/min. Pausing for {sleep_time:.1f}s to prevent exhaustion...\n")
+
+            sys.stdout.write(
+                f"\n[Rate Limit] Reached limit of {self.rpm_limit} requests/min. Pausing for {sleep_time:.1f}s to prevent exhaustion...\n"
+            )
             sys.stdout.flush()
             await asyncio.sleep(sleep_time)
+
+
 _GLOBAL_RATE_LIMITER: Optional[RateLimiter] = None
+
 
 def _get_rate_limiter() -> RateLimiter:
     global _GLOBAL_RATE_LIMITER
@@ -55,7 +63,6 @@ def _get_rate_limiter() -> RateLimiter:
     return _GLOBAL_RATE_LIMITER
 
 
-
 @dataclass
 class LLMConfig:
     provider: str
@@ -68,8 +75,16 @@ class LLMConfig:
         m = self.model.lower()
         # Common vision-capable models
         vision_keywords = [
-            "gpt-4", "gpt-4o", "gpt-4-vision", "claude", "gemini", "pixtral", 
-            "llava", "moondream", "qwen-vl", "vision"
+            "gpt-4",
+            "gpt-4o",
+            "gpt-4-vision",
+            "claude",
+            "gemini",
+            "pixtral",
+            "llava",
+            "moondream",
+            "qwen-vl",
+            "vision",
         ]
         return any(k in m for k in vision_keywords)
 
@@ -98,8 +113,82 @@ def _default_model(provider: str) -> str:
     return defaults.get(provider, "gpt-4o-mini")
 
 
+_SUPPORTED_PROVIDERS = {"anthropic", "auto", "compatible", "openai", "openrouter"}
+_RETRYABLE_STATUS_CODES = {408, 409, 429}
+
+
+def _status_code(value: Any) -> Optional[int]:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        status_code = int(value)
+    except (TypeError, ValueError):
+        return None
+    return status_code if 100 <= status_code <= 599 else None
+
+
+def _structured_status_code(error: Exception) -> Optional[int]:
+    status_code = _status_code(getattr(error, "status_code", None))
+    if status_code is not None:
+        return status_code
+
+    response = getattr(error, "response", None)
+    return _status_code(getattr(response, "status_code", None))
+
+
+def _message_status_code(message: str) -> Optional[int]:
+    at_start = re.match(r"^\s*([45]\d{2})\b", message)
+    if at_start:
+        return int(at_start.group(1))
+
+    with_context = re.search(
+        r"\b(?:http(?:\s+status)?|status(?:\s+code)?|error\s+code)\s*[:=]?\s*([45]\d{2})\b",
+        message,
+    )
+    return int(with_context.group(1)) if with_context else None
+
+
+def _is_retryable_error(error: Exception) -> bool:
+    status_code = _structured_status_code(error)
+    if status_code is not None:
+        return status_code in _RETRYABLE_STATUS_CODES or 500 <= status_code <= 599
+
+    if isinstance(error, (ConnectionError, TimeoutError)):
+        return True
+
+    message = str(error).lower()
+    status_code = _message_status_code(message)
+    if status_code is not None:
+        return status_code in _RETRYABLE_STATUS_CODES or 500 <= status_code <= 599
+
+    retryable_patterns = (
+        "rate limit",
+        "too many requests",
+        "timeout",
+        "timed out",
+        "connection error",
+        "connection reset",
+        "connection closed",
+        "peer closed",
+        "incomplete chunked read",
+        "remote protocol error",
+        "server disconnected",
+        "network unreachable",
+        "internal server error",
+        "bad gateway",
+        "service unavailable",
+        "gateway timeout",
+    )
+    return any(pattern in message for pattern in retryable_patterns)
+
+
 def load_llm_config() -> LLMConfig:
     provider = os.getenv("LLM_PROVIDER", "auto").strip().lower()
+    if provider not in _SUPPORTED_PROVIDERS:
+        supported = ", ".join(sorted(_SUPPORTED_PROVIDERS))
+        raise ValueError(
+            f"Unsupported LLM_PROVIDER {provider!r}. Expected one of: {supported}."
+        )
 
     if provider == "auto":
         if os.getenv("ANTHROPIC_API_KEY"):
@@ -117,7 +206,7 @@ def load_llm_config() -> LLMConfig:
             model=model
             or os.getenv("OPENROUTER_MODEL")
             or _default_model("openrouter"),
-            api_key=os.getenv("OPENROUTER_API_KEY") or os.getenv("OPENAI_API_KEY"),
+            api_key=os.getenv("OPENROUTER_API_KEY"),
             base_url=os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"),
         )
 
@@ -133,7 +222,7 @@ def load_llm_config() -> LLMConfig:
         return LLMConfig(
             provider="compatible",
             model=model or os.getenv("LLM_MODEL") or _default_model("compatible"),
-            api_key=os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY"),
+            api_key=os.getenv("LLM_API_KEY"),
             base_url=os.getenv("LLM_BASE_URL")
             or os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
         )
@@ -152,7 +241,16 @@ class LLMRouter:
         self._openai_client: Optional[AsyncOpenAI] = None
 
         if self.config.provider in {"openai", "openrouter", "compatible"}:
-            # Some compatible providers/local proxies do not require a key.
+            required_key = {
+                "openai": "OPENAI_API_KEY",
+                "openrouter": "OPENROUTER_API_KEY",
+            }.get(self.config.provider)
+            if required_key and not self.config.api_key:
+                raise RuntimeError(
+                    f"{required_key} is required for provider `{self.config.provider}`."
+                )
+
+            # Compatible providers/local proxies may intentionally be keyless.
             api_key = self.config.api_key or "not-required"
             self._openai_client = AsyncOpenAI(
                 api_key=api_key,
@@ -167,25 +265,26 @@ class LLMRouter:
         tools: list,
         tool_choice: str = "auto",
         stream: bool = False,
+        thinking: bool = False,
     ) -> Any:
-        max_retries = 3
-        
-        for attempt in range(max_retries):
+        max_attempts = 1 if stream else 3
+
+        for attempt in range(max_attempts):
             try:
                 return await self._chat_completions_inner(
-                    messages=messages, tools=tools, tool_choice=tool_choice, stream=stream
+                    messages=messages,
+                    tools=tools,
+                    tool_choice=tool_choice,
+                    stream=stream,
+                    thinking=thinking,
                 )
-            except Exception as e:
-                err_msg = str(e).lower()
-                retryable_patterns = [
-                    "429", "rate limit", "500", "502", "503", "504", "timeout", 
-                    "too many requests", "peer closed", "incomplete chunked read", 
-                    "connection reset", "remote protocol error", "connection closed"
-                ]
-                is_retryable = any(x in err_msg for x in retryable_patterns)
-                if is_retryable and attempt < max_retries - 1:
-                    delay = 2.0 * (2 ** attempt) + random.uniform(0, 1)
-                    print(f"LLM API network or server error ({e}). Retrying in {delay:.2f}s (attempt {attempt + 1}/{max_retries})...")
+            except Exception as error:
+                if _is_retryable_error(error) and attempt < max_attempts - 1:
+                    delay = 2.0 * (2**attempt) + random.uniform(0, 1)
+                    print(
+                        f"LLM API network or server error ({error}). Retrying in "
+                        f"{delay:.2f}s (attempt {attempt + 2}/{max_attempts})..."
+                    )
                     await asyncio.sleep(delay)
                 else:
                     raise
@@ -197,9 +296,10 @@ class LLMRouter:
         tools: list,
         tool_choice: str = "auto",
         stream: bool = False,
+        thinking: bool = False,
     ) -> Any:
         await _get_rate_limiter().wait()
-        
+
         if self.config.provider in {"openai", "openrouter", "compatible"}:
             if not self._openai_client:
                 raise RuntimeError("OpenAI-compatible client is not initialized")
@@ -208,6 +308,11 @@ class LLMRouter:
                 "model": self.config.model,
                 "messages": messages,
             }
+
+            if thinking:
+                model_lower = self.config.model.lower()
+                if "o1" in model_lower or "o3" in model_lower:
+                    kwargs["reasoning_effort"] = "high"
 
             if tools:
                 kwargs["tools"] = tools
@@ -247,6 +352,10 @@ class LLMRouter:
                 "api_key": self.config.api_key,
                 "timeout": 60,
             }
+            if thinking and "claude-3-7" in self.config.model.lower():
+                kwargs["thinking"] = {"type": "enabled", "budget_tokens": 4096}
+                kwargs["max_tokens"] = 8192
+            
             if tools:
                 kwargs["tools"] = tools
                 kwargs["tool_choice"] = tool_choice

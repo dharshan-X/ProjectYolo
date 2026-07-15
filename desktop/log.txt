@@ -1,0 +1,19 @@
+[SYSTEM_LOG]
+Timestamp: 2024-05-24T14:22:00Z
+Component: Browser Orchestrator
+Event: LAUNCH_FAILURE
+Severity: CRITICAL
+
+Description:
+Attempted to initialize a persistent browser context using Camoufox. The process terminated unexpectedly during the handshaking phase.
+
+Error Trace:
+- Protocol Error: Browser.setDefaultViewport
+- Parameter mismatch: Found property "<root>.viewport.isMobile" which is not described in the current scheme.
+- Binary Missing: Failed to spawn child process "/home/dharshan/.cache/camoufox/browsers/official/135.0.1-beta.24/glxtest"
+- Hardware Diagnostics: No GPUs detected via PCI; Crash Annotation GraphicsCriticalError triggered.
+
+Root Cause Analysis:
+The failure is a combination of a version mismatch between the browser's remote debugging protocol and the driver, compounded by a missing graphics test binary (`glxtest`) required for headless initialization.
+
+Status: UNRESOLVED

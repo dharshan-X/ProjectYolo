@@ -1,0 +1,5 @@
+# Project Yolo - Sample Config
+# This file was installed by the Project Yolo installer.
+
+alias yolo='python3 /home/dharshan/project-Yolo/agent.py'
+alias yolo-bot='python3 /home/dharshan/project-Yolo/bot.py'

@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
-    href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=JetBrains+Mono:wght@400;500;600&display=swap"
+    href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=JetBrains+Mono:wght@400;500;600&family=Caveat:wght@400;600;700&display=swap"
     rel="stylesheet">
 
   <!-- Markdown + Code highlighting (CDN for reliability) -->
@@ -38,29 +38,70 @@
   <script>
     try {
       const saved = localStorage.getItem('yolo-desktop-prefs');
-      const p = saved ? JSON.parse(saved) : {};
-      document.documentElement.setAttribute('data-theme', p.theme || 'dark');
+      let p = saved ? JSON.parse(saved) : {};
+      if (!p.theme || p.theme === 'light') {
+        p.theme = 'orange';
+        localStorage.setItem('yolo-desktop-prefs', JSON.stringify(p));
+      }
+      document.documentElement.setAttribute('data-theme', p.theme);
     } catch(e) {
-      document.documentElement.setAttribute('data-theme', 'dark');
+      document.documentElement.setAttribute('data-theme', 'orange');
     }
   </script>
 </head>
 
 <body>
+  <!-- Hidden SVG filters for crayon theme -->
+  <svg style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true">
+    <defs>
+      <filter id="crayon-rough" x="-5%" y="-5%" width="110%" height="110%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="4" seed="5" result="noise"/>
+        <feDisplacementMap in="SourceGraphic" in2="noise" scale="3" xChannelSelector="R" yChannelSelector="G"/>
+      </filter>
+      <filter id="crayon-fill" x="-5%" y="-5%" width="110%" height="110%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" seed="2" result="noise"/>
+        <feColorMatrix type="saturate" values="0" result="grey"/>
+        <feBlend in="SourceGraphic" in2="grey" mode="multiply"/>
+      </filter>
+    </defs>
+  </svg>
   <div id="app">
     <!-- ═══════════════ SIDEBAR ═══════════════ -->
     <aside id="sidebar">
       <div class="sidebar-header">
-        <img src="assets/history.svg" alt="History" height="24">
-        <button id="new-chat-btn" class="icon-btn" type="button" title="New Chat" aria-label="New chat">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19"></line>
-            <line x1="5" y1="12" x2="19" y2="12"></line>
+        <div class="sidebar-top-row">
+          <div class="sidebar-logo">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M7 11h4l-2 4h4v-2H9l2-4H7v2zm10 0h4l-2 4h4v-2h-4l2-4h-4v2z"/>
+            </svg>
+            <span style="font-weight: 700; font-size: 16px;">Yolo</span>
+          </div>
+        </div>
+        <div class="sidebar-actions-row">
+          <button class="icon-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg></button>
+          <button class="icon-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg></button>
+          <button class="icon-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg></button>
+        </div>
+        <button id="new-chat-btn" class="new-chat-btn" type="button" title="New Chat" aria-label="New chat">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
           </svg>
+          <span>New Chat</span>
         </button>
       </div>
+      <div class="workspace-label">Workspace</div>
       <div id="session-list" class="session-list">
         <!-- Sessions will be injected here -->
+      </div>
+      
+      <div class="sidebar-footer">
+        <button id="settings-btn" class="footer-item" type="button">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+          <span>Settings</span>
+        </button>
       </div>
     </aside>
 
@@ -74,49 +115,44 @@
 
       <!-- Chat header -->
       <div id="chat-header">
-        <button id="sidebar-toggle-btn" class="icon-btn" type="button" title="Toggle history sidebar" aria-label="Toggle history sidebar">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-            <line x1="9" y1="3" x2="9" y2="21"/>
-          </svg>
-        </button>
-        <div class="logo-wrapper">
-          <img src="assets/logo.svg" alt="YOLO" height="28" style="display: block; border-radius: 4px;">
-        </div>
-        <div class="chat-header-info"
-          style="margin-left: 12px; border-left: 1px solid var(--border); padding-left: 12px;">
-          <h2 id="chat-title"></h2>
-          <span id="chat-subtitle" class="chat-subtitle">0 MSGS · 0 TOKENS · 0 LLM CALLS</span>
-        </div>
-        <div class="chat-header-actions">
-          <button id="mode-toggle" class="icon-btn" type="button" title="Toggle Safe/YOLO mode" aria-pressed="false" aria-label="Toggle Safe/YOLO mode">
-            <span class="mode-label">Safe</span>
-          </button>
-          <button id="workers-toggle-btn" class="icon-btn" type="button" title="View workers" aria-controls="workers-panel" aria-expanded="false">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-              <circle cx="9" cy="7" r="4"></circle>
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-              <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <button id="sidebar-toggle-btn" class="icon-btn" type="button" title="Toggle history sidebar" aria-label="Toggle history sidebar">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+              <line x1="9" y1="3" x2="9" y2="21"/>
             </svg>
           </button>
+          <div class="logo-wrapper" style="display: flex; align-items: center; gap: 8px;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="color: #ff8c00;">
+            <path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41m11.32-11.32l1.41-1.41"></path>
+            <circle cx="12" cy="12" r="5" fill="#ff8c00"></circle>
+          </svg>
+          <span style="font-weight: 600; font-size: 13px; text-transform: uppercase;">YOLO</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+        </div>
+        </div>
+        <div class="chat-header-actions">
+          <div class="chat-header-info" style="display: none;">
+            <h2 id="chat-title"></h2>
+            <span id="chat-subtitle" class="chat-subtitle">0 MSGS · 0 TOKENS · 0 LLM CALLS</span>
+          </div>
+          <button id="mode-toggle" class="icon-btn" type="button" title="Toggle Safe/YOLO mode" aria-pressed="false" aria-label="Toggle Safe/YOLO mode" style="width: auto; gap: 4px; padding: 0 10px; font-size: 12px; font-weight: 500;">
+            <span class="mode-label">Safe</span>
+          </button>
           <button id="refresh-btn" class="icon-btn" type="button" title="Refresh chat" aria-label="Refresh chat">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M21 2v6h-6"></path>
               <path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path>
               <path d="M3 22v-6h6"></path>
               <path d="M21 12a9 9 0 0 1-15 6.7L3 16"></path>
             </svg>
           </button>
-          <button id="settings-btn" class="icon-btn" type="button" title="Settings" aria-haspopup="dialog" aria-controls="settings-modal">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="3" />
-              <path
-                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          <button id="workers-toggle-btn" class="icon-btn" type="button" title="View workers" aria-controls="workers-panel" aria-expanded="false" style="width: auto; gap: 6px; padding: 0 12px; font-size: 13px; font-weight: 500;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
             </svg>
+            Control
           </button>
         </div>
       </div>
@@ -126,51 +162,23 @@
         <div id="messages" class="messages" role="log" aria-live="polite" aria-relevant="additions text" aria-label="Chat messages">
           <!-- Welcome state -->
           <div id="welcome-screen" class="welcome-screen">
-            <div class="welcome-logo-wrapper">
-              <img src="assets/logo.svg" alt="YOLO" class="welcome-logo-img">
-            </div>
-            <h1 class="welcome-title">Welcome to <span class="yolo-logo-text">YOL<span class="o-red">O</span></span></h1>
-            <p class="welcome-desc">Your autonomous AI agent. Ask anything — code, research, system control, and more.</p>
-            
-            <div class="welcome-cards">
-              <div class="welcome-card" data-prompt="Generate a Next.js landing page with premium glassmorphism CSS styling.">
-                <div class="card-icon">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/><line x1="14" y1="2" x2="10" y2="22"/></svg>
-                </div>
-                <h3>Write Code</h3>
-                <p>Generate a Next.js landing page with glassmorphism CSS styling.</p>
-              </div>
-              <div class="welcome-card" data-prompt="Analyze and compare the latest browser automation libraries. What are the trade-offs?">
-                <div class="card-icon">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                </div>
-                <h3>Deep Research</h3>
-                <p>Analyze and compare the latest browser automation libraries.</p>
-              </div>
-              <div class="welcome-card" data-prompt="Check the CPU load, running tasks, and active network connections.">
-                <div class="card-icon">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
-                </div>
-                <h3>System Control</h3>
-                <p>Check the CPU load, running tasks, and active network connections.</p>
-              </div>
-              <div class="welcome-card" data-prompt="Brainstorm some innovative startup ideas combining AI and developer productivity.">
-                <div class="card-icon">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                </div>
-                <h3>General Chat</h3>
-                <p>Brainstorm startup ideas or chat about anything on your mind.</p>
-              </div>
-            </div>
+
+
           </div>
         </div>
       </div>
 
       <!-- Input area -->
       <div id="input-area">
-        <div class="input-wrapper floating-input">
+        <div class="input-wrapper floating-input" style="position: relative; flex-direction: column; padding: 16px 20px; align-items: stretch; gap: 12px; border-radius: 24px;">
+          <!-- 🐱 Mochi sits on top border of input bar -->
+          <div id="cat-mascot" title="Mochi">
+            <div id="cat-bubble" class="cat-bubble hidden"></div>
+            <img id="cat-img" src="assets/mascot_cat.png" alt="Mochi the cat" draggable="false" />
+          </div>
           <input type="file" id="file-upload" style="display: none;" multiple />
-          <div id="attach-menu" class="attach-menu hidden" aria-hidden="true">
+          
+          <div id="attach-menu" class="attach-menu hidden" aria-hidden="true" style="bottom: 100%; margin-bottom: 12px; left: 0;">
             <button class="attach-menu-item" data-type="image">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
               <span>Images</span>
@@ -180,17 +188,37 @@
               <span>Files</span>
             </button>
           </div>
-          <button id="attach-btn" class="input-icon-btn" type="button" title="Attach" aria-label="Attach" aria-haspopup="menu" aria-controls="attach-menu" aria-expanded="false">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-              stroke-linecap="round" stroke-linejoin="round">
-              <path
-                d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
-            </svg>
-          </button>
-          <div class="input-center-stack">
-            <div id="attachment-chips" class="attachment-chips hidden"></div>
-            <textarea id="message-input" placeholder="Type a message..." rows="1" spellcheck="false" autofocus></textarea>
+
+          <!-- Top Row: Text Area and Send Button -->
+          <div style="display: flex; align-items: flex-start; gap: 12px; width: 100%;">
+            <div class="input-center-stack" style="flex: 1; min-width: 0; padding: 0;">
+              <div id="attachment-chips" class="attachment-chips hidden"></div>
+              <textarea id="message-input" placeholder="Ask me anything..." rows="1" spellcheck="false" autofocus style="margin: 0; padding: 4px 0; min-height: 24px; max-height: 200px; line-height: 1.5; font-size: 14px; width: 100%;"></textarea>
+            </div>
+            
+            <div class="input-actions-right" style="display: flex; align-items: center; gap: 8px;">
+              <button id="stop-btn" class="custom-stop-btn hidden" type="button" title="Stop generating" aria-label="Stop generating">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                  <rect x="6" y="6" width="12" height="12" rx="2" ry="2"></rect>
+                </svg>
+              </button>
+              <button id="voice-btn" class="input-icon-btn voice-btn" type="button" title="Voice message" aria-label="Record voice message" aria-pressed="false" style="display: none;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                  <line x1="12" y1="19" x2="12" y2="22"></line>
+                </svg>
+              </button>
+              <button id="send-btn" class="custom-send-btn" type="button" title="Send message" aria-label="Send message" disabled style="width: 32px; height: 32px; border-radius: 50%; padding: 0; display: flex; align-items: center; justify-content: center; background: #000; color: #fff;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="12" y1="19" x2="12" y2="5"></line>
+                  <polyline points="5 12 12 5 19 12"></polyline>
+                </svg>
+              </button>
+            </div>
           </div>
+
+          <!-- Recording Indicator (Hidden by default) -->
           <div id="recording-indicator" class="recording-indicator hidden">
             <div class="recording-divider"></div>
             <button id="cancel-voice-btn" class="input-icon-btn cancel-voice-btn" title="Cancel recording">
@@ -209,25 +237,18 @@
             <span class="recording-time">0:00</span>
           </div>
 
-          <div class="input-actions-right">
-            <button id="stop-btn" class="custom-stop-btn hidden" type="button" title="Stop generating" aria-label="Stop generating">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                <rect x="6" y="6" width="12" height="12" rx="2" ry="2"></rect>
-              </svg>
-            </button>
-            <button id="voice-btn" class="input-icon-btn voice-btn" type="button" title="Voice message" aria-label="Record voice message" aria-pressed="false">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
-                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-                <line x1="12" y1="19" x2="12" y2="22"></line>
-              </svg>
-            </button>
-            <button id="send-btn" class="custom-send-btn" type="button" title="Send message" aria-label="Send message" disabled>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="12" y1="19" x2="12" y2="5"></line>
-                <polyline points="5 12 12 5 19 12"></polyline>
-              </svg>
-            </button>
+          <!-- Bottom Row: Icons and Prompts -->
+          <div style="display: flex; align-items: center; gap: 16px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <button id="attach-btn" class="input-icon-btn" type="button" title="Attach" aria-label="Attach" aria-haspopup="menu" aria-controls="attach-menu" aria-expanded="false" style="padding: 4px; width: 24px; height: 24px; color: #a1a1aa; opacity: 0.8;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                </svg>
+              </button>
+              <button id="add-image-btn" class="input-icon-btn" type="button" title="Add Image" style="padding: 4px; width: 24px; height: 24px; color: #a1a1aa; opacity: 0.8;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+              </button>
+            </div>
           </div>
         </div>
         <div id="active-widget-container" class="hidden"></div>
@@ -391,11 +412,13 @@
                 <div class="setting-item">
                   <div class="setting-info">
                     <label>Application Theme</label>
-                    <span>Choose between light and dark modes.</span>
+                    <span>Choose between light orange, dark, terracotta, and crayon modes.</span>
                   </div>
                   <div class="theme-selector">
-                    <button class="theme-btn active" type="button" data-theme="dark">Dark</button>
-                    <button class="theme-btn" data-theme="light">Light</button>
+                    <button class="theme-btn" type="button" data-theme="orange">Light Orange</button>
+                    <button class="theme-btn" type="button" data-theme="dark">Dark</button>
+                    <button class="theme-btn" type="button" data-theme="terracotta">Terracotta</button>
+                    <button class="theme-btn" type="button" data-theme="crayon">Crayon</button>
                   </div>
                 </div>
               </div>

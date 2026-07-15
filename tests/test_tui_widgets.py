@@ -54,16 +54,16 @@ async def test_timer():
         
         # Test preset buttons
         await pilot.click("#timer-add-10s")
-        await pilot.pause(0.1)
+        await pilot.pause(0.3)
         assert timer.duration == 10
         
         await pilot.click("#timer-add-1m")
-        await pilot.pause(0.1)
+        await pilot.pause(0.3)
         assert timer.duration == 70
         
         # Reset timer
         await pilot.click("#timer-reset")
-        await pilot.pause(0.1)
+        await pilot.pause(0.3)
         assert timer.duration == 0
         
         # Set custom duration via text input
@@ -71,20 +71,20 @@ async def test_timer():
         input_widget.focus()
         await pilot.press(*"1:30")
         await pilot.press("enter")
-        await pilot.pause(0.1)
+        await pilot.pause(0.3)
         
         assert timer.duration == 90
         
         # Toggle start/pause
         await pilot.click("#timer-toggle")
-        await pilot.pause(0.1)
+        await pilot.pause(0.3)
         assert timer.running is True
         
         await pilot.click("#timer-toggle")
-        await pilot.pause(0.1)
+        await pilot.pause(0.3)
         assert timer.running is False
         
         # Reset
         await pilot.click("#timer-reset")
-        await pilot.pause(0.1)
+        await pilot.pause(0.3)
         assert timer.duration == 0

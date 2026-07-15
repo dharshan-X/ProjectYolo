@@ -6,20 +6,7 @@ import re
 import shutil
 from typing import Callable, Optional
 
-from tools.base import audit_log, resolve_and_verify_path
-
-
-def _get_int_env(name: str, default: int, min_value: int = 1) -> int:
-    raw = os.getenv(name)
-    if not raw:
-        return default
-    try:
-        value = int(raw)
-    except ValueError:
-        return default
-    if value < min_value:
-        return default
-    return value
+from tools.base import audit_log, resolve_and_verify_path, _get_int_env
 
 
 MAX_READ_CHARS = _get_int_env("MAX_FILE_READ_CHARS", 120000)

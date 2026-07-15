@@ -15,7 +15,7 @@
     isLoading: false,
     yoloMode: false,
     thinkMode: false,
-    theme: 'dark',
+    theme: 'orange',
     sidebarCollapsed: false, // Added for collapsible sidebar
     selectedFiles: [], // Added for visual chips
     activePaletteIndex: -1, // Added for keyboard navigation
@@ -33,6 +33,25 @@
     }
     fileHistory.push([...state.selectedFiles]);
     if (fileHistory.length > 50) fileHistory.shift();
+  }
+
+  // ── Message Management ──
+  const MAX_MESSAGES = 100; // Maximum number of messages to keep in memory
+
+  function addMessage(msg) {
+    state.messages.push(msg);
+    
+    // If we exceed the limit, remove oldest messages
+    if (state.messages.length > MAX_MESSAGES) {
+      const removeCount = state.messages.length - MAX_MESSAGES;
+      state.messages.splice(0, removeCount);
+    }
+  }
+
+  function cleanupMessages() {
+    if (state.messages.length > MAX_MESSAGES) {
+      state.messages.splice(0, state.messages.length - MAX_MESSAGES);
+    }
   }
 
   function undoFile() {
@@ -189,6 +208,9 @@
     attachmentChips: $('#attachment-chips'), // Added
     sendBtn: $('#send-btn'),
     attachBtn: $('#attach-btn'),
+    addImageBtn: $('#add-image-btn'),
+    promptLibraryBtn: $('#prompt-library-btn'),
+    improvePromptBtn: $('#improve-prompt-btn'),
     fileUpload: $('#file-upload'), // Added explicitly if not there
     attachMenu: $('#attach-menu'), // Added explicitly if not there
     modeToggle: $('#mode-toggle'),
@@ -338,9 +360,11 @@
         ? formatTime(lastActive)
         : lastActive.toLocaleDateString();
 
+      const displayName = s.title || `Session ${s.user_id}`;
+
       item.innerHTML = `
-        <div class="session-name">Session ${s.user_id}</div>
-        <div class="session-meta">${timeStr}</div>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px; flex-shrink: 0; opacity: 0.6;"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+        <div class="session-name" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${displayName}</div>
       `;
       
       item.addEventListener('click', () => {
@@ -377,7 +401,7 @@
       if (saved) {
         const p = JSON.parse(saved);
         state.userId = p.userId || 1;
-        state.theme = p.theme || 'dark';
+        state.theme = p.theme || 'orange';
         state.sidebarCollapsed = p.sidebarCollapsed || false;
       }
     } catch {}
@@ -427,10 +451,14 @@
         }));
 
         // Sync mode badge
-        const label = dom.modeToggle.querySelector('.mode-label');
-        label.textContent = state.yoloMode ? 'YOLO' : 'Safe';
-        label.classList.toggle('yolo', state.yoloMode);
-        dom.modeToggle.setAttribute('aria-pressed', state.yoloMode ? 'true' : 'false');
+        if (dom.modeToggle) {
+          const label = dom.modeToggle.querySelector('.mode-label');
+          if (label) {
+            label.textContent = state.yoloMode ? 'YOLO' : 'Safe';
+            label.classList.toggle('yolo', state.yoloMode);
+          }
+          dom.modeToggle.setAttribute('aria-pressed', state.yoloMode ? 'true' : 'false');
+        }
 
         // Update subtitle (Session title removed as per request)
         updateStats(data.history_length || 0, data.total_tokens || 0, data.llm_call_count || 0);
@@ -485,48 +513,7 @@
   function createWelcomeScreen() {
     const div = document.createElement('div');
     div.className = 'welcome-screen';
-    div.innerHTML = `
-      <div class="welcome-logo-wrapper">
-        <span style="font-family: 'Playfair Display', serif; font-style: italic; font-size: 32px; font-weight: 700; color: var(--text-primary);">Y</span>
-      </div>
-      <h1 class="welcome-title">Welcome to <span class="yolo-logo-text">YOL<span class="o-red">O</span></span></h1>
-      <p class="welcome-desc">Your autonomous AI agent. Ask anything — code, research, system control, and more.</p>
-      
-      <div class="welcome-cards">
-        <div class="welcome-card" data-prompt="Generate a Next.js landing page with premium glassmorphism CSS styling.">
-          <div class="card-icon">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/><line x1="14" y1="2" x2="10" y2="22"/></svg>
-          </div>
-          <h3>Write Code</h3>
-          <p>Generate a Next.js landing page with glassmorphism CSS styling.</p>
-        </div>
-        <div class="welcome-card" data-prompt="Analyze and compare the latest browser automation libraries. What are the trade-offs?">
-          <div class="card-icon">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          </div>
-          <h3>Deep Research</h3>
-          <p>Analyze and compare the latest browser automation libraries.</p>
-        </div>
-        <div class="welcome-card" data-prompt="Check the CPU load, running tasks, and active network connections.">
-          <div class="card-icon">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
-          </div>
-          <h3>System Control</h3>
-          <p>Check the CPU load, running tasks, and active network connections.</p>
-        </div>
-        <div class="welcome-card" data-prompt="Brainstorm some innovative startup ideas combining AI and developer productivity.">
-          <div class="card-icon">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-          </div>
-          <h3>General Chat</h3>
-          <p>Brainstorm startup ideas or chat about anything on your mind.</p>
-        </div>
-      </div>
-      
-      <p style="font-size: 11px; color: var(--text-muted); margin-top: 24px; margin-bottom: 0 !important; opacity: 0.6; text-align: center;">
-        Session is shared with Telegram &amp; CLI. Type <kbd style="background: var(--bg-secondary); border: 1px solid var(--border); padding: 1px 4px; border-radius: 3px;">/</kbd> for commands.
-      </p>
-    `;
+    div.innerHTML = ``;
     return div;
   }
 
@@ -798,8 +785,8 @@
     renderAttachmentChips();
 
     state.isLoading = true;
-    dom.stopBtn.classList.remove('hidden');
-    dom.voiceBtn.classList.add('hidden');
+    if (dom.stopBtn) dom.stopBtn.classList.remove('hidden');
+    if (dom.voiceBtn) dom.voiceBtn.classList.add('hidden');
 
     try {
       let result;
@@ -831,8 +818,8 @@
           removeTypingIndicator();
           renderMessages(true);
           state.isLoading = false;
-          dom.stopBtn.classList.add('hidden');
-          dom.voiceBtn.classList.remove('hidden');
+          if (dom.stopBtn) dom.stopBtn.classList.add('hidden');
+          if (dom.voiceBtn) dom.voiceBtn.classList.remove('hidden');
           return;
         }
         removeTypingIndicator();
@@ -918,7 +905,7 @@
             toolDetails.appendChild(summary);
             toolDetails.appendChild(logContent);
             toolGroup.appendChild(toolDetails);
-            streamWrapper.insertBefore(toolGroup, statusEl);
+            streamWrapper.insertBefore(toolGroup, streamContent);
             scrollToBottom();
           } else if (type === 'tool_result') {
             // Find the matching tool group using call_id if available
@@ -1071,16 +1058,19 @@
       // Always clean up stream listener (BUG-30 fix)
       window.yoloAPI.removeChatStreamListeners();
       state.isLoading = false;
-      dom.stopBtn.classList.add('hidden');
-      dom.voiceBtn.classList.remove('hidden');
+      if (dom.stopBtn) dom.stopBtn.classList.add('hidden');
+      if (dom.voiceBtn) dom.voiceBtn.classList.remove('hidden');
     }
   }
 
   function syncModeBadge() {
+    if (!dom.modeToggle) return;
     const label = dom.modeToggle.querySelector('.mode-label');
-    label.textContent = state.yoloMode ? 'YOLO' : 'Safe';
-    label.classList.toggle('yolo', state.yoloMode);
-    if (dom.modeToggle) dom.modeToggle.setAttribute('aria-pressed', state.yoloMode ? 'true' : 'false');
+    if (label) {
+      label.textContent = state.yoloMode ? 'YOLO' : 'Safe';
+      label.classList.toggle('yolo', state.yoloMode);
+    }
+    dom.modeToggle.setAttribute('aria-pressed', state.yoloMode ? 'true' : 'false');
   }
 
   function updateStats(historyLen, totalTokens, llmCalls) {
@@ -1103,6 +1093,41 @@
 
   // ── Events ──
   function bindEvents() {
+    if (dom.addImageBtn) {
+      dom.addImageBtn.addEventListener('click', () => {
+        if (dom.fileUpload) {
+          dom.fileUpload.setAttribute('accept', 'image/*');
+          dom.fileUpload.click();
+          setTimeout(() => dom.fileUpload.removeAttribute('accept'), 100);
+        }
+      });
+    }
+
+    if (dom.promptLibraryBtn) {
+      const promptMenu = document.getElementById('prompt-library-menu');
+      dom.promptLibraryBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (promptMenu) {
+          promptMenu.classList.toggle('hidden');
+        }
+      });
+      document.addEventListener('click', (e) => {
+        if (promptMenu && !promptMenu.contains(e.target) && !dom.promptLibraryBtn.contains(e.target)) {
+          promptMenu.classList.add('hidden');
+        }
+      });
+    }
+
+    if (dom.improvePromptBtn) {
+      dom.improvePromptBtn.addEventListener('click', () => {
+        if (dom.input.value.trim() !== '') {
+          dom.input.value = dom.input.value.trim() + ' (Please respond with maximum detail, clarity, and well-structured professional markdown)';
+          dom.input.focus();
+          dom.input.dispatchEvent(new Event('input'));
+        }
+      });
+    }
+
     // Event delegation for copying code blocks
     if (dom.messages) {
       dom.messages.addEventListener('click', (e) => {
@@ -1289,38 +1314,45 @@
       });
     }
 
-    dom.modeToggle.addEventListener('click', () => {
-      const newMode = state.yoloMode ? 'safe' : 'yolo';
-      sendMessage(`/mode ${newMode}`);
-    });
+    if (dom.modeToggle) {
+      dom.modeToggle.addEventListener('click', () => {
+        const newMode = state.yoloMode ? 'safe' : 'yolo';
+        sendMessage(`/mode ${newMode}`);
+      });
+    }
     
-    dom.refreshBtn.addEventListener('click', () => {
-      window.location.reload();
-    });
+    if (dom.refreshBtn) {
+      dom.refreshBtn.addEventListener('click', () => {
+        window.location.reload();
+      });
+    }
 
-    dom.newChatBtn.addEventListener('click', () => {
-      // Find a new unused user ID or just pick a high one
-      const maxId = state.sessions.reduce((max, s) => Math.max(max, s.user_id), 0);
-      state.userId = maxId + 1;
-      state.messages = [];
-      savePrefs();
-      hydrateFromSession();
-      dom.input.focus();
-    });
+    if (dom.newChatBtn) {
+      dom.newChatBtn.addEventListener('click', () => {
+        const maxId = state.sessions.reduce((max, s) => Math.max(max, s.user_id), 0);
+        state.userId = maxId + 1;
+        state.messages = [];
+        savePrefs();
+        hydrateFromSession();
+        dom.input.focus();
+      });
+    }
 
     // File Attach
-    dom.attachBtn.addEventListener('mousedown', (e) => {
-      e.preventDefault();
-      const isHidden = dom.attachMenu.classList.toggle('hidden');
-      const isOpen = !isHidden;
-      dom.attachBtn.classList.toggle('active', isOpen);
-      dom.attachBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-      dom.attachMenu.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
-      if (isOpen) {
-        dom.attachMenu.setAttribute('role', 'menu');
-        dom.attachMenu.querySelectorAll('button').forEach(btn => btn.setAttribute('role', 'menuitem'));
-      }
-    });
+    if (dom.attachBtn) {
+      dom.attachBtn.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        const isHidden = dom.attachMenu.classList.toggle('hidden');
+        const isOpen = !isHidden;
+        dom.attachBtn.classList.toggle('active', isOpen);
+        dom.attachBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+        dom.attachMenu.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+        if (isOpen) {
+          dom.attachMenu.setAttribute('role', 'menu');
+          dom.attachMenu.querySelectorAll('button').forEach(btn => btn.setAttribute('role', 'menuitem'));
+        }
+      });
+    }
 
     document.querySelectorAll('.attach-menu-item').forEach(item => {
       item.addEventListener('click', () => {
@@ -1496,8 +1528,10 @@
 
           mediaRecorder.start();
           dom.input.parentElement.classList.add('expanded');
-          dom.voiceBtn.classList.add('recording');
-          dom.voiceBtn.classList.add('hidden'); // Hide voice button while recording
+          if (dom.voiceBtn) {
+            dom.voiceBtn.classList.add('recording');
+            dom.voiceBtn.classList.add('hidden');
+          }
           dom.recordingIndicator.classList.remove('hidden');
           dom.input.classList.add('hidden');
           dom.sendBtn.disabled = false; // Ensure send is clickable
@@ -1511,8 +1545,10 @@
           mediaRecorder.stop();
         }
         dom.input.parentElement.classList.remove('expanded');
-        dom.voiceBtn.classList.remove('recording');
-        dom.voiceBtn.classList.remove('hidden');
+        if (dom.voiceBtn) {
+          dom.voiceBtn.classList.remove('recording');
+          dom.voiceBtn.classList.remove('hidden');
+        }
         dom.recordingIndicator.classList.add('hidden');
         dom.input.classList.remove('hidden');
         dom.sendBtn.disabled = !dom.input.value.trim(); // Revert to text logic
@@ -1520,19 +1556,25 @@
       }
     }
 
-    dom.stopBtn.addEventListener('click', () => {
-      window.yoloAPI.abortChatStream();
-    });
+    if (dom.stopBtn) {
+      dom.stopBtn.addEventListener('click', () => {
+        window.yoloAPI.abortChatStream();
+      });
+    }
 
-    dom.voiceBtn.addEventListener('mousedown', (e) => {
-      e.preventDefault();
-      const isRecording = !dom.voiceBtn.classList.contains('recording');
-      toggleRecording(isRecording);
-    });
+    if (dom.voiceBtn) {
+      dom.voiceBtn.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        const isRecording = !dom.voiceBtn.classList.contains('recording');
+        toggleRecording(isRecording);
+      });
+    }
 
-    dom.cancelVoiceBtn.addEventListener('click', () => {
-      toggleRecording(false);
-    });
+    if (dom.cancelVoiceBtn) {
+      dom.cancelVoiceBtn.addEventListener('click', () => {
+        toggleRecording(false);
+      });
+    }
 
     // Settings Category Switching
     dom.settingsNavItems.forEach(item => {
@@ -1604,6 +1646,7 @@
     }
 
     let lastFocusedEl = null;
+    if (dom.settingsBtn) {
     dom.settingsBtn.addEventListener('click', () => {
       lastFocusedEl = document.activeElement;
       dom.settingUserId.value = state.userId;
@@ -1617,31 +1660,37 @@
         if (closeBtn) closeBtn.focus();
       }, 0);
     });
+    }
     const closeSettingsModal = () => {
       dom.settingsModal.classList.add('hidden');
       dom.settingsModal.setAttribute('aria-hidden', 'true');
       if (lastFocusedEl && lastFocusedEl.focus) lastFocusedEl.focus();
     };
-    dom.closeSettings.addEventListener('click', closeSettingsModal);
+    if (dom.closeSettings) dom.closeSettings.addEventListener('click', closeSettingsModal);
     
     // Workers
-    dom.workersToggleBtn.addEventListener('click', () => {
-      const willOpen = dom.workersPanel.classList.contains('collapsed');
-      dom.workersPanel.classList.toggle('collapsed');
-      dom.workersToggleBtn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
-      if (willOpen) {
-        // focus first interactive element in panel
-        setTimeout(() => {
-          const first = dom.workersPanel.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
-          if (first) first.focus();
-        }, 0);
-      }
-    });
-    dom.closeWorkers.addEventListener('click', () => {
-      dom.workersPanel.classList.add('collapsed');
-      dom.workersToggleBtn.setAttribute('aria-expanded', 'false');
-      dom.workersToggleBtn.focus();
-    });
+    if (dom.workersToggleBtn) {
+      dom.workersToggleBtn.addEventListener('click', () => {
+        const willOpen = dom.workersPanel.classList.contains('collapsed');
+        dom.workersPanel.classList.toggle('collapsed');
+        dom.workersToggleBtn.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+        if (willOpen) {
+          setTimeout(() => {
+            const first = dom.workersPanel.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+            if (first) first.focus();
+          }, 0);
+        }
+      });
+    }
+    if (dom.closeWorkers) {
+      dom.closeWorkers.addEventListener('click', () => {
+        dom.workersPanel.classList.add('collapsed');
+        if (dom.workersToggleBtn) {
+          dom.workersToggleBtn.setAttribute('aria-expanded', 'false');
+          dom.workersToggleBtn.focus();
+        }
+      });
+    }
 
 
     if (dom.toggleSettingsSidebar) {
@@ -2662,4 +2711,134 @@
     document.documentElement.style.setProperty('--mouse-y', `${y}px`);
   });
 
+})();
+
+/* ═══════════════════════════════════════════
+   🐱 CAT MASCOT — Mochi (Multi-State Controller)
+   ═══════════════════════════════════════════ */
+(function initCatMascot() {
+  const mascot  = document.getElementById('cat-mascot');
+  const bubble  = document.getElementById('cat-bubble');
+  const sendBtn = document.getElementById('send-btn');
+  const stopBtn = document.getElementById('stop-btn');
+  const inputEl = document.getElementById('message-input');
+  const catImg  = document.getElementById('cat-img');
+
+  if (!mascot) return;
+
+  let bubbleTimer = null;
+  let idleTimer   = null;
+  let happyTimer  = null;
+  let isThinking  = false;
+  let currentState = 'idle';
+
+  const spriteMap = {
+    'cat-thinking': 'assets/mascot_cat_thinking.png',
+    'cat-sent':     'assets/mascot_cat_sent.png',
+    'cat-happy':    'assets/mascot_cat_happy.png',
+    'idle':         'assets/mascot_cat.png'
+  };
+
+  const idleSayings = [
+    'Meow~ 🐾', 'Purrrr...', 'Pet me!', '...zzz 😴',
+    "I'm watching 👀", 'Mrow?', '*kneads keyboard*',
+    '*knocks cup off table*', 'Feed me data 🐟',
+    'Got bugs? I\'ll catch them 🐛',
+  ];
+  const thinkingSayings = ['Hmm... 🤔', 'Thinking hard...', 'One sec! ⚡'];
+  const happySayings    = ['Here you go! ✨', 'Done! 🐾', 'Meow! 😸', 'Purrfect! 🐱'];
+
+  function showBubble(text, duration) {
+    if (bubbleTimer) clearTimeout(bubbleTimer);
+    bubble.textContent = text;
+    bubble.classList.remove('hidden');
+    if (duration) {
+      bubbleTimer = setTimeout(() => bubble.classList.add('hidden'), duration);
+    }
+  }
+
+  function hideBubble() {
+    if (bubbleTimer) clearTimeout(bubbleTimer);
+    bubble.classList.add('hidden');
+  }
+
+  function setState(state) {
+    currentState = state || 'idle';
+    mascot.classList.remove('cat-thinking', 'cat-sent', 'cat-happy');
+    if (state && state !== 'idle') {
+      mascot.classList.add(state);
+    }
+    if (catImg) {
+      catImg.src = spriteMap[currentState] || spriteMap['idle'];
+    }
+  }
+
+  function rand(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+  // ── State 4: Happy on click ──
+  mascot.addEventListener('click', () => {
+    if (happyTimer) clearTimeout(happyTimer);
+    setState('cat-happy');
+    showBubble(rand(idleSayings), 2500);
+    happyTimer = setTimeout(() => {
+      setState(isThinking ? 'cat-thinking' : 'idle');
+    }, 2500);
+  });
+
+  // ── State 3: Sent / Excited on send ──
+  function onSend() {
+    if (happyTimer) clearTimeout(happyTimer);
+    setState('cat-sent');
+    showBubble('On it! 🐾', 1000);
+    setTimeout(() => {
+      if (isThinking) {
+        setState('cat-thinking');
+        showBubble(rand(thinkingSayings));
+      } else {
+        setState('idle');
+      }
+    }, 800);
+  }
+
+  if (sendBtn) sendBtn.addEventListener('click', onSend);
+  if (inputEl) {
+    inputEl.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) onSend();
+    });
+  }
+
+  // ── State 2 (Thinking) & State 4 (Happy on response) via Observer ──
+  if (stopBtn) {
+    const obs = new MutationObserver(() => {
+      const thinking = !stopBtn.classList.contains('hidden');
+      if (thinking && !isThinking) {
+        isThinking = true;
+        setState('cat-thinking');
+        showBubble(rand(thinkingSayings));
+      } else if (!thinking && isThinking) {
+        isThinking = false;
+        if (happyTimer) clearTimeout(happyTimer);
+        setState('cat-happy');
+        showBubble(rand(happySayings), 2800);
+        happyTimer = setTimeout(() => {
+          setState('idle');
+        }, 2800);
+      }
+    });
+    obs.observe(stopBtn, { attributes: true, attributeFilter: ['class'] });
+  }
+
+  // Idle chatter every ~45s
+  function scheduleIdle() {
+    idleTimer = setTimeout(() => {
+      if (!isThinking && currentState === 'idle') {
+        showBubble(rand(idleSayings), 2800);
+      }
+      scheduleIdle();
+    }, 45000 + Math.random() * 20000);
+  }
+  scheduleIdle();
+
+  // Initial greeting
+  setTimeout(() => showBubble("Hello! I'm Mochi 🐱", 3200), 1500);
 })();

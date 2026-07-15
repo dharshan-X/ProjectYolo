@@ -201,14 +201,14 @@ class AgenticIDE(App):
                     
                     if result == "approve":
                         await agent.resolve_confirmations(
-                            self.session, self.session.user_id, signal_handler=signal_handler, confirm_all=False
+                            self.session, self.session.user_id, signal_handler=signal_handler, confirm_all=False, memory_service=self.session_manager.memory
                         )
                         is_resume = True
                         continue
 
                     elif result == "approve_all":
                         await agent.resolve_confirmations(
-                            self.session, self.session.user_id, signal_handler=signal_handler, confirm_all=True
+                            self.session, self.session.user_id, signal_handler=signal_handler, confirm_all=True, memory_service=self.session_manager.memory
                         )
                         is_resume = True
                         continue

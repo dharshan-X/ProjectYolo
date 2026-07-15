@@ -370,7 +370,3 @@ It is highly recommended to run Yolo within an isolated sandbox, virtual machine
 - **Path Sandboxing (`resolve_and_verify_path`)**: Proactively prevents arbitrary access to sensitive OS files (e.g., `/etc`, `/dev`, `C:/Windows`), fully resolving symlinks to thwart evasion.
 - **Strict Output Constraints**: Generation tools like `create_artifact` employ rigorous alphanumeric sanitization on filenames and extensions to prevent directory traversal payloads.
 - **Robust Execution**: Tool and agent loops natively handle corrupt data and non-UTF8 payloads without crashing, ensuring the core cognitive cycle (`agent.py`) remains stable.
-
-## License
-
-All rights reserved. Use at your own risk.

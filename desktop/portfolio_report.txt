@@ -1,0 +1,34 @@
+Hey Nitheesh, I've reviewed your portfolio site (nitheeshr.vercel.app). Here's a quick technical breakdown:
+
+🌐 Site Overview
+- Title: Nitheesh R | Portfolio
+- Stack: React SPA on Vercel, dark theme (#0a0a0a)
+- Sections: Home, Skills, Projects, About, Contact
+
+🛠️ Tech Stack (as listed)
+Python, Java, JavaScript, TypeScript, MongoDB, PostgreSQL, Firebase, Redis, Node.js, REST APIs, Microservices, Nginx, Qdrant, MCP, React, Next.js, Tailwind, HTML5, DSA, OOPs, ML, Git/GitHub
+
+📁 Projects Showcased
+1. Coral — Agentic OS-level AI assistant (Python/PyQt5, Multi-LLM)
+2. AgriFuse — Digital agricultural ecosystem (React 18/Firebase/Tailwind) — SIH winner
+3. CrisisSync — Emergency response platform (Next.js 16/React 19/TypeScript)
+4. LeetCode Analyser — Batch performance tracker (Python/Flask/GraphQL)
+
+🏆 Achievements
+- 1st Prize at Smart India Hackathon (AgriFuse)
+- 2nd Prize at Google Innovative Club
+- 500+ LeetCode problems solved
+
+🎓 Education
+- B.E. Computer Science — CGPA 8.2
+- Higher Secondary — CGPA 7.6
+
+📄 Resume: nitheeshr.vercel.app/assets/nitsresume-FoZiSSZM.pdf
+
+⚠️ Technical Notes
+- Only internal link found is the resume PDF — no GitHub/social links detected on the site
+- PDF is well-served with proper Content-Type headers
+- Vercel CDN caching is active (x-vercel-cache: HIT)
+- HSTS enabled with 2-year max-age
+
+Site is clean and functional. Solid project lineup.

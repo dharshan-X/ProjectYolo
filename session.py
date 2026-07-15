@@ -19,7 +19,7 @@ class Session:
     message_history: List[Dict[str, Any]] = field(default_factory=list)
     pending_confirmations: List[Dict[str, Any]] = field(default_factory=list)
     yolo_mode: bool = False
-    think_mode: bool = False
+    think_mode: bool = True
     think_mode_policy: str = "auto"
     llm_model: Optional[str] = None
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
@@ -73,14 +73,42 @@ class SessionManager:
                 load_session(user_id)
             )
             if history is not None:
-                self.sessions[user_id] = Session(
+                fresh_defaults = Session(user_id=user_id)
+                session = Session(
                     user_id=user_id,
                     message_history=history,
                     pending_confirmations=pending_confirmations or [],
-                    yolo_mode=yolo_mode,
-                    think_mode=think_mode,
-                    think_mode_policy=think_mode_policy or "auto",
+                    yolo_mode=(
+                        fresh_defaults.yolo_mode if yolo_mode is None else yolo_mode
+                    ),
+                    think_mode=(
+                        fresh_defaults.think_mode if think_mode is None else think_mode
+                    ),
+                    think_mode_policy=(
+                        think_mode_policy or fresh_defaults.think_mode_policy
+                    ),
                 )
+                import json
+
+                try:
+                    history_repr = json.dumps(history, sort_keys=True, default=str)
+                    pending_repr = json.dumps(
+                        session.pending_confirmations, sort_keys=True, default=str
+                    )
+                    session.last_saved_signature = hash(
+                        (
+                            len(history),
+                            hash(history_repr),
+                            session.yolo_mode,
+                            session.think_mode,
+                            session.think_mode_policy,
+                            hash(pending_repr),
+                        )
+                    )
+                    session.history_dirty = False
+                except Exception:
+                    pass
+                self.sessions[user_id] = session
             else:
                 self.sessions[user_id] = Session(user_id=user_id)
 
@@ -110,22 +138,31 @@ class SessionManager:
         # costs the same O(n) as the save we're about to skip, so it's cheap
         # relative to the SQLite write it avoids.
         import json
+
         try:
-            history_repr = json.dumps(session.message_history, sort_keys=True, default=str)
-            pending_repr = json.dumps(session.pending_confirmations, sort_keys=True, default=str)
+            history_repr = json.dumps(
+                session.message_history, sort_keys=True, default=str
+            )
+            pending_repr = json.dumps(
+                session.pending_confirmations, sort_keys=True, default=str
+            )
         except Exception:
             # Unserializable payload: never dedup, always persist.
             history_repr = None
             pending_repr = None
 
-        signature = None if history_repr is None else hash(
-            (
-                len(session.message_history),
-                hash(history_repr),
-                session.yolo_mode,
-                session.think_mode,
-                session.think_mode_policy,
-                hash(pending_repr),
+        signature = (
+            None
+            if history_repr is None
+            else hash(
+                (
+                    len(session.message_history),
+                    hash(history_repr),
+                    session.yolo_mode,
+                    session.think_mode,
+                    session.think_mode_policy,
+                    hash(pending_repr),
+                )
             )
         )
         if (
@@ -149,14 +186,19 @@ class SessionManager:
 
     def clear(self, user_id: int):
         user_id = self.resolve_id(user_id)
-        if user_id in self.sessions:
-            del self.sessions[user_id]
-        if user_id in self.locks:
-            del self.locks[user_id]
-        # Also clear from DB for a true reset
-        from tools.database_ops import save_session as db_save
+        self.sessions.pop(user_id, None)
 
-        db_save(user_id, [], False, False, "auto", None)
+        # Keep the per-user lock stable across resets. Replacing it could let a
+        # new request bypass work still protected by the existing lock.
+        reset_session = Session(user_id=user_id)
+        save_session(
+            user_id,
+            reset_session.message_history,
+            reset_session.yolo_mode,
+            reset_session.think_mode,
+            reset_session.think_mode_policy,
+            reset_session.pending_confirmations,
+        )
 
     async def auto_expiry_task(self):
         """Background task to remove expired sessions from memory (but keep in DB)."""
@@ -171,14 +213,19 @@ class SessionManager:
             for uid in expired_ids:
                 lock = self.get_lock(uid)
                 if lock.locked():
-                    continue # Busy, skip this round
-                    
+                    continue  # Busy, skip this round
+
                 async with lock:
                     # Save to DB before dropping from memory (force to bypass dedup cache)
-                    self.save(uid, force=True)
-                    if uid in self.sessions:
-                        del self.sessions[uid]
-                    # We keep the lock in self.locks for future requests, 
+                    try:
+                        self.save(uid, force=True)
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception:
+                        # A transient failure for one session must not stop expiry
+                        # processing for every other session.
+                        continue
+                    self.sessions.pop(uid, None)
+                    # We keep the lock in self.locks for future requests,
                     # it will be reused by get_lock. Cleaning it up might
                     # cause a new lock to be created while we still hold this one.
-

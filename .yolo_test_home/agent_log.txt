@@ -78,3 +78,279 @@
 {"timestamp": "2026-06-16T20:33:10.135270", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "status": "matched"}, "status": "success", "detail": ""}
 {"timestamp": "2026-06-16T20:33:10.192856", "tool": "adjust_rate_limiting", "args": {"rpm_limit": 50}, "status": "success", "detail": "Rate limit set to 50 RPM"}
 {"timestamp": "2026-06-16T20:33:10.194922", "tool": "gui_mouse_click", "args": {"button": "left", "clicks": 1, "x": 805, "y": 801}, "status": "success", "detail": "Mouse clicked at (805, 801)"}
+{"timestamp": "2026-07-12T10:49:15.200250", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "hello"}
+{"timestamp": "2026-07-12T10:49:15.204157", "tool": "agent", "args": {"user_id": 1}, "status": "THINKING", "detail": "Consulting LLM..."}
+{"timestamp": "2026-07-12T10:49:15.291594", "tool": "edit_file", "args": {"path": "g.txt"}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:49:15.414061", "tool": "schedule_task", "args": {"task": "Backup database", "interval": 60}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:49:15.414366", "tool": "schedule_daily_task", "args": {"task": "Daily report", "interval": 1440}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:49:15.414816", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:49:15.415133", "tool": "cancel_scheduled_task", "args": {"id": 1, "user_id": 456}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:49:15.415366", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:49:16.169723", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "pattern": "matching message", "timeout": 1}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T10:49:16.170367", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "pattern": "matches here", "timeout": 3}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T10:49:17.172633", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "status": "matched"}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:49:17.240498", "tool": "adjust_rate_limiting", "args": {"rpm_limit": 50}, "status": "success", "detail": "Rate limit set to 50 RPM"}
+{"timestamp": "2026-07-12T10:51:11.582690", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "hello"}
+{"timestamp": "2026-07-12T10:51:11.582893", "tool": "agent", "args": {"user_id": 1}, "status": "THINKING", "detail": "Consulting LLM..."}
+{"timestamp": "2026-07-12T10:51:11.666106", "tool": "edit_file", "args": {"path": "g.txt"}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:51:11.752655", "tool": "schedule_task", "args": {"task": "Backup database", "interval": 60}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:51:11.753095", "tool": "schedule_daily_task", "args": {"task": "Daily report", "interval": 1440}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:51:11.753609", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:51:11.754033", "tool": "cancel_scheduled_task", "args": {"id": 1, "user_id": 456}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:51:11.754493", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:51:12.477540", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "pattern": "matching message", "timeout": 1}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T10:51:12.478110", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "pattern": "matches here", "timeout": 3}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T10:51:13.479426", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "status": "matched"}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:51:13.571444", "tool": "adjust_rate_limiting", "args": {"rpm_limit": 50}, "status": "success", "detail": "Rate limit set to 50 RPM"}
+{"timestamp": "2026-07-12T10:52:09.846901", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "hello"}
+{"timestamp": "2026-07-12T10:52:09.847463", "tool": "agent", "args": {"user_id": 1}, "status": "THINKING", "detail": "Consulting LLM..."}
+{"timestamp": "2026-07-12T10:52:09.912910", "tool": "edit_file", "args": {"path": "g.txt"}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:52:09.980581", "tool": "schedule_task", "args": {"task": "Backup database", "interval": 60}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:52:09.980753", "tool": "schedule_daily_task", "args": {"task": "Daily report", "interval": 1440}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:52:09.981137", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:52:09.981339", "tool": "cancel_scheduled_task", "args": {"id": 1, "user_id": 456}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:52:09.981495", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:52:11.271339", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "pattern": "matching message", "timeout": 1}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T10:52:11.273503", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "pattern": "matches here", "timeout": 3}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T10:52:12.276149", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "status": "matched"}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:52:12.414134", "tool": "adjust_rate_limiting", "args": {"rpm_limit": 50}, "status": "success", "detail": "Rate limit set to 50 RPM"}
+{"timestamp": "2026-07-12T10:52:54.711049", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "hello"}
+{"timestamp": "2026-07-12T10:52:54.711507", "tool": "agent", "args": {"user_id": 1}, "status": "THINKING", "detail": "Consulting LLM..."}
+{"timestamp": "2026-07-12T10:52:54.878482", "tool": "edit_file", "args": {"path": "g.txt"}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:52:55.017696", "tool": "schedule_task", "args": {"task": "Backup database", "interval": 60}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:52:55.018340", "tool": "schedule_daily_task", "args": {"task": "Daily report", "interval": 1440}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:52:55.018975", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:52:55.019467", "tool": "cancel_scheduled_task", "args": {"id": 1, "user_id": 456}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:52:55.019861", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:52:55.951456", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "pattern": "matching message", "timeout": 1}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T10:52:55.952109", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "pattern": "matches here", "timeout": 3}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T10:52:56.953962", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "status": "matched"}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:52:57.049319", "tool": "adjust_rate_limiting", "args": {"rpm_limit": 50}, "status": "success", "detail": "Rate limit set to 50 RPM"}
+{"timestamp": "2026-07-12T10:52:57.055304", "tool": "gui_mouse_click", "args": {"button": "left", "clicks": 1, "x": 805, "y": 801}, "status": "success", "detail": "Mouse clicked at (805, 801)"}
+{"timestamp": "2026-07-12T10:54:23.851992", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "hello"}
+{"timestamp": "2026-07-12T10:54:23.852610", "tool": "agent", "args": {"user_id": 1}, "status": "THINKING", "detail": "Consulting LLM..."}
+{"timestamp": "2026-07-12T10:54:23.959706", "tool": "edit_file", "args": {"path": "g.txt"}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:54:24.071520", "tool": "schedule_task", "args": {"task": "Backup database", "interval": 60}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:54:24.071780", "tool": "schedule_daily_task", "args": {"task": "Daily report", "interval": 1440}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:54:24.072183", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:54:24.072357", "tool": "cancel_scheduled_task", "args": {"id": 1, "user_id": 456}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:54:24.072499", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:54:25.105460", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "pattern": "matching message", "timeout": 1}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T10:54:25.106238", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "pattern": "matches here", "timeout": 3}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T10:54:26.108278", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "status": "matched"}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:54:26.167891", "tool": "adjust_rate_limiting", "args": {"rpm_limit": 50}, "status": "success", "detail": "Rate limit set to 50 RPM"}
+{"timestamp": "2026-07-12T10:54:26.173283", "tool": "gui_mouse_click", "args": {"button": "left", "clicks": 1, "x": 805, "y": 801}, "status": "success", "detail": "Mouse clicked at (805, 801)"}
+{"timestamp": "2026-07-12T10:57:44.258610", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "hello"}
+{"timestamp": "2026-07-12T10:57:44.259028", "tool": "agent", "args": {"user_id": 1}, "status": "THINKING", "detail": "Consulting LLM..."}
+{"timestamp": "2026-07-12T10:57:44.453906", "tool": "edit_file", "args": {"path": "g.txt"}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:57:44.672299", "tool": "schedule_task", "args": {"task": "Backup database", "interval": 60}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:57:44.673270", "tool": "schedule_daily_task", "args": {"task": "Daily report", "interval": 1440}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:57:44.674051", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:57:44.674579", "tool": "cancel_scheduled_task", "args": {"id": 1, "user_id": 456}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:57:44.675224", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:57:46.121813", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "pattern": "matching message", "timeout": 1}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T10:57:46.123016", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "pattern": "matches here", "timeout": 3}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T10:57:47.125250", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "status": "matched"}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:57:47.205275", "tool": "adjust_rate_limiting", "args": {"rpm_limit": 50}, "status": "success", "detail": "Rate limit set to 50 RPM"}
+{"timestamp": "2026-07-12T10:57:47.211603", "tool": "gui_mouse_click", "args": {"button": "left", "clicks": 1, "x": 805, "y": 801}, "status": "success", "detail": "Mouse clicked at (805, 801)"}
+{"timestamp": "2026-07-12T10:58:31.623150", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "hello"}
+{"timestamp": "2026-07-12T10:58:31.623547", "tool": "agent", "args": {"user_id": 1}, "status": "THINKING", "detail": "Consulting LLM..."}
+{"timestamp": "2026-07-12T10:58:31.736501", "tool": "edit_file", "args": {"path": "g.txt"}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:58:31.821014", "tool": "schedule_task", "args": {"task": "Backup database", "interval": 60}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:58:31.821196", "tool": "schedule_daily_task", "args": {"task": "Daily report", "interval": 1440}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:58:31.821435", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:58:31.821577", "tool": "cancel_scheduled_task", "args": {"id": 1, "user_id": 456}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:58:31.821707", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:58:32.781357", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "pattern": "matching message", "timeout": 1}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T10:58:32.782432", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "pattern": "matches here", "timeout": 3}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T10:58:33.784137", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "status": "matched"}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T10:58:33.861107", "tool": "adjust_rate_limiting", "args": {"rpm_limit": 50}, "status": "success", "detail": "Rate limit set to 50 RPM"}
+{"timestamp": "2026-07-12T10:58:33.865068", "tool": "gui_mouse_click", "args": {"button": "left", "clicks": 1, "x": 805, "y": 801}, "status": "success", "detail": "Mouse clicked at (805, 801)"}
+{"timestamp": "2026-07-12T11:11:21.306127", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "hello"}
+{"timestamp": "2026-07-12T11:11:21.306279", "tool": "agent", "args": {"user_id": 1}, "status": "THINKING", "detail": "Consulting LLM..."}
+{"timestamp": "2026-07-12T11:11:21.391503", "tool": "edit_file", "args": {"path": "g.txt"}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T11:11:21.478098", "tool": "schedule_task", "args": {"task": "Backup database", "interval": 60}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T11:11:21.478548", "tool": "schedule_daily_task", "args": {"task": "Daily report", "interval": 1440}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T11:11:21.479133", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T11:11:21.479453", "tool": "cancel_scheduled_task", "args": {"id": 1, "user_id": 456}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T11:11:21.479724", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T11:11:22.639664", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "pattern": "matching message", "timeout": 1}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T11:11:22.640571", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "pattern": "matches here", "timeout": 3}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T11:11:23.642855", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "status": "matched"}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T11:11:23.754196", "tool": "adjust_rate_limiting", "args": {"rpm_limit": 50}, "status": "success", "detail": "Rate limit set to 50 RPM"}
+{"timestamp": "2026-07-12T11:11:23.762172", "tool": "gui_mouse_click", "args": {"button": "left", "clicks": 1, "x": 805, "y": 801}, "status": "success", "detail": "Mouse clicked at (805, 801)"}
+{"timestamp": "2026-07-12T14:07:38.193875", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "hello"}
+{"timestamp": "2026-07-12T14:07:38.194616", "tool": "agent", "args": {"user_id": 1}, "status": "THINKING", "detail": "Consulting LLM..."}
+{"timestamp": "2026-07-12T14:07:38.295511", "tool": "edit_file", "args": {"path": "g.txt"}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T14:07:38.412992", "tool": "schedule_task", "args": {"task": "Backup database", "interval": 60}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T14:07:38.413697", "tool": "schedule_daily_task", "args": {"task": "Daily report", "interval": 1440}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T14:07:38.414499", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T14:07:38.414869", "tool": "cancel_scheduled_task", "args": {"id": 1, "user_id": 456}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T14:07:38.415210", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T14:07:39.816292", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "pattern": "matching message", "timeout": 1}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T14:07:39.817169", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "pattern": "matches here", "timeout": 3}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T14:07:40.818832", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "status": "matched"}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T14:07:40.890215", "tool": "adjust_rate_limiting", "args": {"rpm_limit": 50}, "status": "success", "detail": "Rate limit set to 50 RPM"}
+{"timestamp": "2026-07-12T14:07:40.895754", "tool": "gui_mouse_click", "args": {"button": "left", "clicks": 1, "x": 805, "y": 801}, "status": "success", "detail": "Mouse clicked at (805, 801)"}
+{"timestamp": "2026-07-12T14:51:40.388933", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "hello"}
+{"timestamp": "2026-07-12T14:51:40.389198", "tool": "agent", "args": {"user_id": 1}, "status": "THINKING", "detail": "Consulting LLM..."}
+{"timestamp": "2026-07-12T14:51:40.441108", "tool": "edit_file", "args": {"path": "g.txt"}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T14:51:40.483987", "tool": "schedule_task", "args": {"task": "Backup database", "interval": 60}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T14:51:40.484212", "tool": "schedule_daily_task", "args": {"task": "Daily report", "interval": 1440}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T14:51:40.484622", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T14:51:40.484809", "tool": "cancel_scheduled_task", "args": {"id": 1, "user_id": 456}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T14:51:40.485037", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T14:51:41.522182", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "pattern": "matching message", "timeout": 1}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T14:51:41.522507", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "pattern": "matches here", "timeout": 3}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T14:51:42.523630", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "status": "matched"}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T14:51:42.556898", "tool": "adjust_rate_limiting", "args": {"rpm_limit": 50}, "status": "success", "detail": "Rate limit set to 50 RPM"}
+{"timestamp": "2026-07-12T14:51:42.559812", "tool": "gui_mouse_click", "args": {"button": "left", "clicks": 1, "x": 805, "y": 801}, "status": "success", "detail": "Mouse clicked at (805, 801)"}
+{"timestamp": "2026-07-12T14:53:43.363964", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "hello"}
+{"timestamp": "2026-07-12T14:53:43.364262", "tool": "agent", "args": {"user_id": 1}, "status": "THINKING", "detail": "Consulting LLM..."}
+{"timestamp": "2026-07-12T14:53:43.403329", "tool": "agent", "args": {"user_id": 1}, "status": "COMPACT", "detail": "Compacting history (12 messages)..."}
+{"timestamp": "2026-07-12T14:53:43.403643", "tool": "agent", "args": {"user_id": 1}, "status": "COMPACT", "detail": "History successfully compacted."}
+{"timestamp": "2026-07-12T14:53:43.407167", "tool": "agent", "args": {"user_id": 1}, "status": "COMPACT", "detail": "Compacting history (15 messages)..."}
+{"timestamp": "2026-07-12T14:53:43.407462", "tool": "agent", "args": {"user_id": 1}, "status": "COMPACT", "detail": "History successfully compacted."}
+{"timestamp": "2026-07-12T14:53:43.411384", "tool": "agent", "args": {"user_id": 1}, "status": "COMPACT", "detail": "Compacting history (15 messages)..."}
+{"timestamp": "2026-07-12T14:53:43.411687", "tool": "agent", "args": {"user_id": 1}, "status": "ERROR", "detail": "Failed to compact history: LLM Down"}
+{"timestamp": "2026-07-12T14:53:43.417061", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "write something"}
+{"timestamp": "2026-07-12T14:53:43.417209", "tool": "agent", "args": {"user_id": 1}, "status": "THINKING", "detail": "Consulting LLM..."}
+{"timestamp": "2026-07-12T14:53:43.417336", "tool": "agent", "args": {"user_id": 1}, "status": "ZIP", "detail": "Zipped message content of role 'system' (5772 -> 112 chars) to avoid usage limits."}
+{"timestamp": "2026-07-12T14:53:43.422112", "tool": "agent", "args": {"user_id": 1}, "status": "RESUME", "detail": "Completing turn with 1 tool calls..."}
+{"timestamp": "2026-07-12T14:53:43.622250", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "do both"}
+{"timestamp": "2026-07-12T14:53:43.622401", "tool": "agent", "args": {"user_id": 1}, "status": "THINKING", "detail": "Consulting LLM..."}
+{"timestamp": "2026-07-12T14:53:43.622537", "tool": "agent", "args": {"user_id": 1}, "status": "ZIP", "detail": "Zipped message content of role 'system' (5772 -> 112 chars) to avoid usage limits."}
+{"timestamp": "2026-07-12T14:53:43.627141", "tool": "agent", "args": {"user_id": 1}, "status": "RESUME", "detail": "Completing turn with 2 tool calls..."}
+{"timestamp": "2026-07-12T14:53:43.695586", "tool": "edit_file", "args": {"path": "g.txt"}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T14:56:43.666276", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "hello"}
+{"timestamp": "2026-07-12T14:56:43.667822", "tool": "agent", "args": {"user_id": 1}, "status": "THINKING", "detail": "Consulting LLM..."}
+{"timestamp": "2026-07-12T15:15:31.988276", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "hello"}
+{"timestamp": "2026-07-12T15:15:31.988640", "tool": "agent", "args": {"user_id": 1}, "status": "THINKING", "detail": "Consulting LLM..."}
+{"timestamp": "2026-07-12T15:15:32.025910", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "write something"}
+{"timestamp": "2026-07-12T15:15:32.026076", "tool": "agent", "args": {"user_id": 1}, "status": "THINKING", "detail": "Consulting LLM..."}
+{"timestamp": "2026-07-12T15:15:32.031988", "tool": "agent", "args": {"user_id": 1}, "status": "RESUME", "detail": "Completing turn with 1 tool calls..."}
+{"timestamp": "2026-07-12T15:15:32.231946", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "do both"}
+{"timestamp": "2026-07-12T15:15:32.232085", "tool": "agent", "args": {"user_id": 1}, "status": "THINKING", "detail": "Consulting LLM..."}
+{"timestamp": "2026-07-12T15:15:32.237006", "tool": "agent", "args": {"user_id": 1}, "status": "RESUME", "detail": "Completing turn with 2 tool calls..."}
+{"timestamp": "2026-07-12T15:15:33.303869", "tool": "tool_result", "args": {"user_id": 42, "name": "security_contextual_tool"}, "status": "success", "detail": "ok"}
+{"timestamp": "2026-07-12T15:15:33.305940", "tool": "tool_call", "args": {"user_id": 42, "name": "security_kwargs_tool", "args": {"user_id": 999, "session": "model-session", "router": "model-router", "confirm_func": "model-confirm", "ordinary": "unchanged"}}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T15:15:33.306125", "tool": "tool_result", "args": {"user_id": 42, "name": "security_kwargs_tool"}, "status": "success", "detail": "ok"}
+{"timestamp": "2026-07-12T15:15:33.379099", "tool": "tool_call", "args": {"user_id": 123, "name": "chaos_success", "args": {"arg1": "hello"}}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T15:15:33.379727", "tool": "tool_result", "args": {"user_id": 123, "name": "chaos_success"}, "status": "success", "detail": "Success: hello, default"}
+{"timestamp": "2026-07-12T15:15:33.382082", "tool": "tool_call", "args": {"user_id": 123, "name": "chaos_success", "args": {"arg1": "json"}}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T15:15:33.382683", "tool": "tool_result", "args": {"user_id": 123, "name": "chaos_success"}, "status": "success", "detail": "Success: json, default"}
+{"timestamp": "2026-07-12T15:15:33.387568", "tool": "tool_call", "args": {"user_id": 123, "name": "non_existent_tool", "args": {}}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T15:15:33.387723", "tool": "tool_result", "args": {"user_id": 123, "name": "non_existent_tool"}, "status": "error", "detail": "not found"}
+{"timestamp": "2026-07-12T15:15:33.389911", "tool": "tool_call", "args": {"user_id": 123, "name": "chaos_error", "args": {}}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T15:15:33.390403", "tool": "tool_result", "args": {"user_id": 123, "name": "chaos_error"}, "status": "success", "detail": "Error in chaos_error: Chaos error happened"}
+{"timestamp": "2026-07-12T15:15:33.393119", "tool": "tool_call", "args": {"user_id": 123, "name": "chaos_return_non_str", "args": {}}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T15:15:33.393808", "tool": "tool_result", "args": {"user_id": 123, "name": "chaos_return_non_str"}, "status": "success", "detail": "{'status': 'ok', 'value': 42}"}
+{"timestamp": "2026-07-12T15:15:33.396590", "tool": "tool_call", "args": {"user_id": 123, "name": "chaos_transient_error", "args": {}}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T15:15:33.397369", "tool": "tool_retry", "args": {"user_id": 123, "name": "chaos_transient_error", "attempt": 1}, "status": "error", "detail": "Transient failure; retrying in 0.5s"}
+{"timestamp": "2026-07-12T15:15:33.898893", "tool": "tool_result", "args": {"user_id": 123, "name": "chaos_transient_error"}, "status": "success", "detail": "Recovered"}
+{"timestamp": "2026-07-12T15:15:33.901770", "tool": "tool_call", "args": {"user_id": 123, "name": "chaos_injection", "args": {}}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T15:15:33.902988", "tool": "tool_result", "args": {"user_id": 123, "name": "chaos_injection"}, "status": "success", "detail": "Injected: 123"}
+{"timestamp": "2026-07-12T15:18:38.450552", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "hello"}
+{"timestamp": "2026-07-12T15:18:38.450729", "tool": "agent", "args": {"user_id": 1}, "status": "THINKING", "detail": "Consulting LLM..."}
+{"timestamp": "2026-07-12T15:18:38.487516", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "write something"}
+{"timestamp": "2026-07-12T15:18:38.487693", "tool": "agent", "args": {"user_id": 1}, "status": "THINKING", "detail": "Consulting LLM..."}
+{"timestamp": "2026-07-12T15:18:38.493275", "tool": "agent", "args": {"user_id": 1}, "status": "RESUME", "detail": "Completing turn with 1 tool calls..."}
+{"timestamp": "2026-07-12T15:18:38.494268", "tool": "agent", "args": {"user_id": 1}, "status": "THINKING", "detail": "Consulting LLM..."}
+{"timestamp": "2026-07-12T15:18:38.500980", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "do both"}
+{"timestamp": "2026-07-12T15:18:38.501138", "tool": "agent", "args": {"user_id": 1}, "status": "THINKING", "detail": "Consulting LLM..."}
+{"timestamp": "2026-07-12T15:18:38.507043", "tool": "agent", "args": {"user_id": 1}, "status": "RESUME", "detail": "Completing turn with 2 tool calls..."}
+{"timestamp": "2026-07-12T15:18:39.363612", "tool": "tool_result", "args": {"user_id": 42, "name": "security_contextual_tool"}, "status": "success", "detail": "ok"}
+{"timestamp": "2026-07-12T15:18:39.366089", "tool": "tool_call", "args": {"user_id": 42, "name": "security_kwargs_tool", "args": {"user_id": 999, "session": "model-session", "router": "model-router", "confirm_func": "model-confirm", "ordinary": "unchanged"}}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T15:18:39.366347", "tool": "tool_result", "args": {"user_id": 42, "name": "security_kwargs_tool"}, "status": "success", "detail": "ok"}
+{"timestamp": "2026-07-12T15:18:39.434263", "tool": "tool_call", "args": {"user_id": 123, "name": "chaos_success", "args": {"arg1": "hello"}}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T15:18:39.435452", "tool": "tool_result", "args": {"user_id": 123, "name": "chaos_success"}, "status": "success", "detail": "Success: hello, default"}
+{"timestamp": "2026-07-12T15:18:39.437860", "tool": "tool_call", "args": {"user_id": 123, "name": "chaos_success", "args": {"arg1": "json"}}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T15:18:39.438395", "tool": "tool_result", "args": {"user_id": 123, "name": "chaos_success"}, "status": "success", "detail": "Success: json, default"}
+{"timestamp": "2026-07-12T15:18:39.442407", "tool": "tool_call", "args": {"user_id": 123, "name": "non_existent_tool", "args": {}}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T15:18:39.442581", "tool": "tool_result", "args": {"user_id": 123, "name": "non_existent_tool"}, "status": "error", "detail": "not found"}
+{"timestamp": "2026-07-12T15:18:39.445006", "tool": "tool_call", "args": {"user_id": 123, "name": "chaos_error", "args": {}}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T15:18:39.445587", "tool": "tool_result", "args": {"user_id": 123, "name": "chaos_error"}, "status": "success", "detail": "Error in chaos_error: Chaos error happened"}
+{"timestamp": "2026-07-12T15:18:39.447727", "tool": "tool_call", "args": {"user_id": 123, "name": "chaos_return_non_str", "args": {}}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T15:18:39.448249", "tool": "tool_result", "args": {"user_id": 123, "name": "chaos_return_non_str"}, "status": "success", "detail": "{'status': 'ok', 'value': 42}"}
+{"timestamp": "2026-07-12T15:18:39.450439", "tool": "tool_call", "args": {"user_id": 123, "name": "chaos_transient_error", "args": {}}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T15:18:39.450990", "tool": "tool_retry", "args": {"user_id": 123, "name": "chaos_transient_error", "attempt": 1}, "status": "error", "detail": "Transient failure; retrying in 0.5s"}
+{"timestamp": "2026-07-12T15:18:39.952919", "tool": "tool_result", "args": {"user_id": 123, "name": "chaos_transient_error"}, "status": "success", "detail": "Recovered"}
+{"timestamp": "2026-07-12T15:18:39.956880", "tool": "tool_call", "args": {"user_id": 123, "name": "chaos_injection", "args": {}}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T15:18:39.957968", "tool": "tool_result", "args": {"user_id": 123, "name": "chaos_injection"}, "status": "success", "detail": "Injected: 123"}
+{"timestamp": "2026-07-12T15:19:12.899670", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "hello"}
+{"timestamp": "2026-07-12T15:19:12.899877", "tool": "agent", "args": {"user_id": 1}, "status": "THINKING", "detail": "Consulting LLM..."}
+{"timestamp": "2026-07-12T15:19:12.927660", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "Deeply refactor this multi-step architecture"}
+{"timestamp": "2026-07-12T15:19:13.074201", "tool": "agent", "args": {"user_id": 1}, "status": "RETRY", "detail": "LLM returned an empty stream; retrying the round."}
+{"timestamp": "2026-07-12T15:19:13.074603", "tool": "agent", "args": {"user_id": 1}, "status": "RETRY", "detail": "LLM returned an empty stream; retrying the round."}
+{"timestamp": "2026-07-12T15:19:13.078059", "tool": "agent", "args": {"user_id": 1}, "status": "RESUME", "detail": "Completing turn with 1 tool calls..."}
+{"timestamp": "2026-07-12T15:19:13.120113", "tool": "edit_file", "args": {"path": "g.txt"}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T15:19:13.161525", "tool": "schedule_task", "args": {"task": "Backup database", "interval": 60}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T15:19:13.161720", "tool": "schedule_daily_task", "args": {"task": "Daily report", "interval": 1440}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T15:19:13.162007", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T15:19:13.162185", "tool": "cancel_scheduled_task", "args": {"id": 1, "user_id": 456}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T15:19:13.162377", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T15:19:14.418582", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "pattern": "matching message", "timeout": 1}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T15:19:14.418887", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "pattern": "matches here", "timeout": 3}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T15:19:15.420652", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "status": "matched"}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T15:19:15.452433", "tool": "tool_result", "args": {"user_id": 42, "name": "security_contextual_tool"}, "status": "success", "detail": "ok"}
+{"timestamp": "2026-07-12T15:19:15.454612", "tool": "tool_call", "args": {"user_id": 42, "name": "security_kwargs_tool", "args": {"user_id": 999, "session": "model-session", "router": "model-router", "confirm_func": "model-confirm", "ordinary": "unchanged"}}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T15:19:15.454782", "tool": "tool_result", "args": {"user_id": 42, "name": "security_kwargs_tool"}, "status": "success", "detail": "ok"}
+{"timestamp": "2026-07-12T15:19:15.507759", "tool": "adjust_rate_limiting", "args": {"rpm_limit": 50}, "status": "success", "detail": "Rate limit set to 50 RPM"}
+{"timestamp": "2026-07-12T15:19:15.510291", "tool": "gui_mouse_click", "args": {"button": "left", "clicks": 1, "x": 805, "y": 801}, "status": "success", "detail": "Mouse clicked at (805, 801)"}
+{"timestamp": "2026-07-12T15:20:17.288737", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "hello"}
+{"timestamp": "2026-07-12T15:20:17.289022", "tool": "agent", "args": {"user_id": 1}, "status": "THINKING", "detail": "Consulting LLM..."}
+{"timestamp": "2026-07-12T15:20:17.323345", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "Deeply refactor this multi-step architecture"}
+{"timestamp": "2026-07-12T15:20:17.323581", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "say hello"}
+{"timestamp": "2026-07-12T15:20:17.341377", "tool": "agent", "args": {"user_id": 1}, "status": "RETRY", "detail": "LLM returned an empty stream; retrying the round."}
+{"timestamp": "2026-07-12T15:20:17.341804", "tool": "agent", "args": {"user_id": 1}, "status": "RETRY", "detail": "LLM returned an empty stream; retrying the round."}
+{"timestamp": "2026-07-12T15:20:17.345355", "tool": "agent", "args": {"user_id": 1}, "status": "RESUME", "detail": "Completing turn with 1 tool calls..."}
+{"timestamp": "2026-07-12T15:20:17.382894", "tool": "edit_file", "args": {"path": "g.txt"}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T15:20:17.436667", "tool": "schedule_task", "args": {"task": "Backup database", "interval": 60}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T15:20:17.437061", "tool": "schedule_daily_task", "args": {"task": "Daily report", "interval": 1440}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T15:20:17.437681", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T15:20:17.437978", "tool": "cancel_scheduled_task", "args": {"id": 1, "user_id": 456}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T15:20:17.438194", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T15:20:18.682143", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "pattern": "matching message", "timeout": 1}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T15:20:18.682746", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "pattern": "matches here", "timeout": 3}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T15:20:19.684673", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "status": "matched"}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T15:20:19.736604", "tool": "tool_result", "args": {"user_id": 42, "name": "security_contextual_tool"}, "status": "success", "detail": "ok"}
+{"timestamp": "2026-07-12T15:20:19.740826", "tool": "tool_call", "args": {"user_id": 42, "name": "security_kwargs_tool", "args": {"user_id": 999, "session": "model-session", "router": "model-router", "confirm_func": "model-confirm", "ordinary": "unchanged"}}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T15:20:19.741026", "tool": "tool_result", "args": {"user_id": 42, "name": "security_kwargs_tool"}, "status": "success", "detail": "ok"}
+{"timestamp": "2026-07-12T15:20:19.809474", "tool": "adjust_rate_limiting", "args": {"rpm_limit": 50}, "status": "success", "detail": "Rate limit set to 50 RPM"}
+{"timestamp": "2026-07-12T15:20:19.811915", "tool": "gui_mouse_click", "args": {"button": "left", "clicks": 1, "x": 805, "y": 801}, "status": "success", "detail": "Mouse clicked at (805, 801)"}
+{"timestamp": "2026-07-12T15:24:30.135856", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "hello"}
+{"timestamp": "2026-07-12T15:24:30.136099", "tool": "agent", "args": {"user_id": 1}, "status": "THINKING", "detail": "Consulting LLM..."}
+{"timestamp": "2026-07-12T15:24:30.169379", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "Deeply refactor this multi-step architecture"}
+{"timestamp": "2026-07-12T15:24:30.169785", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "say hello"}
+{"timestamp": "2026-07-12T15:24:30.187099", "tool": "agent", "args": {"user_id": 1}, "status": "RETRY", "detail": "LLM returned an empty stream; retrying the round."}
+{"timestamp": "2026-07-12T15:24:30.187635", "tool": "agent", "args": {"user_id": 1}, "status": "RETRY", "detail": "LLM returned an empty stream; retrying the round."}
+{"timestamp": "2026-07-12T15:24:30.190242", "tool": "agent", "args": {"user_id": 1}, "status": "RESUME", "detail": "Completing turn with 1 tool calls..."}
+{"timestamp": "2026-07-12T15:26:04.917237", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "hello"}
+{"timestamp": "2026-07-12T15:26:04.917523", "tool": "agent", "args": {"user_id": 1}, "status": "THINKING", "detail": "Consulting LLM..."}
+{"timestamp": "2026-07-12T15:26:04.953579", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "Deeply refactor this multi-step architecture"}
+{"timestamp": "2026-07-12T15:26:04.953824", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "say hello"}
+{"timestamp": "2026-07-12T15:26:04.969212", "tool": "agent", "args": {"user_id": 1}, "status": "RETRY", "detail": "LLM returned an empty stream; retrying the round."}
+{"timestamp": "2026-07-12T15:26:04.969741", "tool": "agent", "args": {"user_id": 1}, "status": "RETRY", "detail": "LLM returned an empty stream; retrying the round."}
+{"timestamp": "2026-07-12T15:26:04.973537", "tool": "agent", "args": {"user_id": 1}, "status": "RESUME", "detail": "Completing turn with 1 tool calls..."}
+{"timestamp": "2026-07-12T15:27:06.497225", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "hello"}
+{"timestamp": "2026-07-12T15:27:06.497563", "tool": "agent", "args": {"user_id": 1}, "status": "THINKING", "detail": "Consulting LLM..."}
+{"timestamp": "2026-07-12T15:27:06.531319", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "Deeply refactor this multi-step architecture"}
+{"timestamp": "2026-07-12T15:27:06.531859", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "say hello"}
+{"timestamp": "2026-07-12T15:27:06.549864", "tool": "agent", "args": {"user_id": 1}, "status": "RETRY", "detail": "LLM returned an empty stream; retrying the round."}
+{"timestamp": "2026-07-12T15:27:06.550481", "tool": "agent", "args": {"user_id": 1}, "status": "RETRY", "detail": "LLM returned an empty stream; retrying the round."}
+{"timestamp": "2026-07-12T15:27:06.554381", "tool": "agent", "args": {"user_id": 1}, "status": "RESUME", "detail": "Completing turn with 1 tool calls..."}
+{"timestamp": "2026-07-12T15:27:06.599186", "tool": "edit_file", "args": {"path": "g.txt"}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T15:27:06.664724", "tool": "schedule_task", "args": {"task": "Backup database", "interval": 60}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T15:27:06.664952", "tool": "schedule_daily_task", "args": {"task": "Daily report", "interval": 1440}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T15:27:06.665262", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T15:27:06.665469", "tool": "cancel_scheduled_task", "args": {"id": 1, "user_id": 456}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T15:27:06.665638", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T15:27:07.878640", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "pattern": "matching message", "timeout": 1}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T15:27:07.878995", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "pattern": "matches here", "timeout": 3}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T15:27:08.880977", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "status": "matched"}, "status": "success", "detail": ""}
+{"timestamp": "2026-07-12T15:27:08.921706", "tool": "tool_call", "args": {"user_id": 42, "name": "security_contextual_tool", "args": {"user_id": 999, "session": "model-session", "router": "model-router", "confirm_func": "<redacted>"}}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T15:27:08.922011", "tool": "tool_result", "args": {"user_id": 42, "name": "security_contextual_tool"}, "status": "success", "detail": "ok"}
+{"timestamp": "2026-07-12T15:27:08.924788", "tool": "tool_call", "args": {"user_id": 42, "name": "security_kwargs_tool", "args": {"user_id": 999, "session": "model-session", "router": "model-router", "confirm_func": "<redacted>", "ordinary": "unchanged"}}, "status": "info", "detail": ""}
+{"timestamp": "2026-07-12T15:27:08.925033", "tool": "tool_result", "args": {"user_id": 42, "name": "security_kwargs_tool"}, "status": "success", "detail": "ok"}
+{"timestamp": "2026-07-12T15:27:08.994834", "tool": "adjust_rate_limiting", "args": {"rpm_limit": 50}, "status": "success", "detail": "Rate limit set to 50 RPM"}
+{"timestamp": "2026-07-12T15:27:08.997404", "tool": "gui_mouse_click", "args": {"button": "left", "clicks": 1, "x": 805, "y": 801}, "status": "success", "detail": "Mouse clicked at (805, 801)"}

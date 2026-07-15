@@ -43,7 +43,9 @@ async def _serve(mode: str) -> None:
         # Graceful shutdown: cancel background missions and close DB
         from tools.background_ops import cancel_all_background_tasks
         from tools.database_ops import close_db
+        from tools.mcp_manager import mcp_manager
         await cancel_all_background_tasks()
+        await mcp_manager.cleanup()
         close_db()
 
 

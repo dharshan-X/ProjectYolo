@@ -1,6 +1,6 @@
+import asyncio
 import importlib
 import os
-import asyncio
 import unittest
 from contextlib import contextmanager
 from unittest import mock
@@ -10,16 +10,27 @@ from session import Session
 
 @contextmanager
 def loaded_agent(**env_overrides):
-    overrides = {"YOLO_HOME": "/home/dharshan/ProjectYolo/.yolo_test_home", **env_overrides}
+    overrides = {
+        "YOLO_HOME": "/home/dharshan/ProjectYolo/.yolo_test_home",
+        **env_overrides,
+    }
     with mock.patch.dict(os.environ, overrides, clear=False):
-        import tools.base
-        import prompt_builder
         import agent as agent_module
+        import prompt_builder
+        import tools.base
 
+        original_pending_confirmation = prompt_builder.PendingConfirmationError
         importlib.reload(tools.base)
         importlib.reload(prompt_builder)
         module = importlib.reload(agent_module)
-        yield module
+        try:
+            yield module
+        finally:
+            # Reloading mutates the existing module dictionaries. Restore the
+            # shared exception identity so tests collected before this context
+            # still catch the exception raised by the reloaded agent.
+            prompt_builder.PendingConfirmationError = original_pending_confirmation
+            setattr(module, "PendingConfirmationError", original_pending_confirmation)
 
 
 class TestAgentPromptArchitecture(unittest.TestCase):
@@ -57,7 +68,7 @@ class TestAgentPromptArchitecture(unittest.TestCase):
             YOLO_SYSTEM_PROMPT_PROFILE="verbose",
         ) as agent_module:
             prompt = agent_module.get_initial_messages()[0]["content"]
-            
+
         self.assertIn("Dharshan's Master AI Identity Profile", prompt)
         self.assertIn("YOLO (Cognitive Apex)", prompt)
         self.assertNotIn("{{identity_profile}}", prompt)
@@ -67,15 +78,20 @@ class TestAgentPromptArchitecture(unittest.TestCase):
             YOLO_SYSTEM_PROMPT_VERSION="unified",
             YOLO_SYSTEM_PROMPT_PROFILE="verbose",
         ) as agent_module:
-            session = Session(user_id=1, message_history=agent_module.get_initial_messages())
+            session = Session(
+                user_id=1, message_history=agent_module.get_initial_messages()
+            )
             agent_module._merge_memory_context_into_system_prompt(
                 session,
                 "[MEMORY_CONTEXT]\n- prefers concise updates",
             )
 
-        system_messages = [m for m in session.message_history if m.get("role") == "system"]
+        system_messages = [
+            m for m in session.message_history if m.get("role") == "system"
+        ]
         self.assertEqual(len(system_messages), 1)
         self.assertIn("[MEMORY_CONTEXT]", system_messages[0]["content"])
+
     def test_normalizer_collapses_multiple_system_messages(self):
         with loaded_agent(
             YOLO_SYSTEM_PROMPT_VERSION="unified",
@@ -92,7 +108,9 @@ class TestAgentPromptArchitecture(unittest.TestCase):
             )
             agent_module._normalize_single_system_message(session)
 
-        system_messages = [m for m in session.message_history if m.get("role") == "system"]
+        system_messages = [
+            m for m in session.message_history if m.get("role") == "system"
+        ]
         assistant_messages = [
             m
             for m in session.message_history
@@ -128,7 +146,9 @@ class TestAgentPromptArchitecture(unittest.TestCase):
 
                     return _gen()
 
-            async def _fake_chat_completions(*, messages, tools, tool_choice="auto", stream=False):
+            async def _fake_chat_completions(
+                *, messages, tools, tool_choice="auto", stream=False
+            ):
                 captured["messages"] = messages
                 return _FakeStream()
 
@@ -140,7 +160,11 @@ class TestAgentPromptArchitecture(unittest.TestCase):
                 ],
             )
 
-            with mock.patch.object(agent_module.router, "chat_completions", side_effect=_fake_chat_completions):
+            with mock.patch.object(
+                agent_module.router,
+                "chat_completions",
+                side_effect=_fake_chat_completions,
+            ):
                 result = asyncio.run(
                     agent_module.run_agent_turn(
                         "hello",

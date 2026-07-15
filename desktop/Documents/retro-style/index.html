@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RETRO SYSTEM v2.0</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=VT323&family=Press+Start+2P&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        :root {
+            --neon-green: #00ff41;
+            --neon-pink: #ff00ff;
+            --neon-cyan: #00ffff;
+            --neon-amber: #ffb000;
+            --dark-bg: #0a0a0a;
+            --scanline: rgba(0, 255, 65, 0.03);
+        }
+        
+        body {
+            background: var(--dark-bg);
+            color: var(--neon-green);
+            font-family: 'VT323', monospace;
+            min-height: 100vh;
+            overflow-x: hidden;
+            position: relative;
+        }
+        
+        /* CRT Screen Effect */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 2px,
+                var(--scanline) 2px,
+                var(--scanline) 4px
+            );
+            pointer-events: none;
+            z-index: 1000;
+            animation: scanline 0.1s linear infinite;
+        }
+        
+        /* Screen Glow */
+        body::after {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(ellipse at center, transparent 40%, rgba(0, 255, 65, 0.1) 100%);
+            pointer-events: none;
+            z-index: 999;
+        }
+        
+        @keyframes scanline {
+            0% { transform: translateY(0); }
+            100% { transform: translateY(4px); }
+        }
+        
+        /* Header */
+        .header {
+            text-align: center;
+            padding: 2rem;
+            border-bottom: 2px solid var(--neon-green);
+            position: relative;
+        }
+        
+        .header h1 {
+            font-family: 'Press Start 2P', monospace;
+            font-size: 1.5rem;
+            text-shadow: 
+                0 0 10px var(--neon-green),
+                0 0 20px var(--neon-green),
+                0 0 40px var(--neon-green);
+            animation: flicker 2s infinite alternate;
+        }
+        
+        .header::before {
+            content: '[ SYSTEM READY ]';
+            position: absolute;
+            top: 0.5rem;
+            right: 1rem;
+            font-size: 0.8rem;
+            color: var(--neon-amber);
+            animation: blink 1s infinite;
+        }
+        
+        @keyframes flicker {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.9; }
+            70% { opacity: 0.95; }
+        }
+        
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+        
+        /* Main Container */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        /* Terminal Window */
+        .terminal {
+            background: #111;
+            border: 2px solid var(--neon-green);
+            border-radius: 8px;
+            margin-bottom: 2rem;
+            overflow: hidden;
+            box-shadow: 
+                0 0 20px rgba(0, 255, 65, 0.3),
+                inset 0 0 20px rgba(0, 255, 65, 0.05);
+        }
+        
+        .terminal-header {
+            background: #1a1a1a;
+            padding: 0.5rem 1rem;
+            border-bottom: 1px solid var(--neon-green);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .terminal-btn {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            border: none;
+        }
+        
+        .btn-close { background: #ff5f56; }
+        .btn-min { background: #ffbd2e; }
+        .btn-max { background: #27c93f; }
+        
+        .terminal-title {
+            margin-left: auto;
+            font-size: 0.9rem;
+            color: #888;
+        }
+        
+        .terminal-body {
+            padding: 1.5rem;
+            min-height: 200px;
+        }
+        
+        .terminal-line {
+            margin-bottom: 0.5rem;
+            font-size: 1.2rem;
+        }
+        
+        .prompt {
+            color: var(--neon-cyan);
+        }
+        
+        .typing {
+            overflow: hidden;
+            white-space: nowrap;
+            animation: typing 3s steps(40) forwards;
+        }
+        
+        @keyframes typing {
+            from { width: 0; }
+            to { width: 100%; }
+        }
+        
+        .cursor {
+            display: inline-block;
+            width: 10px;
+            height: 1.2rem;
+            background: var(--neon-green);
+            animation: cursor-blink 0.5s infinite;
+            vertical-align: bottom;
+        }
+        
+        @keyframes cursor-blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+        
+        /* Grid of Cards */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin-top: 2rem;
+        }
+        
+        .card {
+            background: #111;
+            border: 1px solid var(--neon-cyan);
+            padding: 1.5rem;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s;
+        }
+        
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(
+                90deg,
+                transparent,
+                rgba(0, 255, 255, 0.1),
+                transparent
+            );
+            transition: left 0.5s;
+        }
+        
+        .card:hover::before {
+            left: 100%;
+        }
+        
+        .card:hover {
+            border-color: var(--neon-pink);
+            box-shadow: 
+                0 0 30px rgba(255, 0, 255, 0.3),
+                inset 0 0 30px rgba(255, 0, 255, 0.05);
+            transform: translateY(-2px);
+        }
+        
+        .card-number {
+            font-family: 'Press Start 2P', monospace;
+            font-size: 0.6rem;
+            color: var(--neon-pink);
+            margin-bottom: 0.5rem;
+        }
+        
+        .card-title {
+            font-size: 1.4rem;
+            color: var(--neon-cyan);
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+        }
+        
+        .card-content {
+            font-size: 1rem;
+            line-height: 1.6;
+            color: #aaa;
+        }
+        
+        /* Progress Bars */
+        .progress-container {
+            margin: 2rem 0;
+        }
+        
+        .progress-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+            font-size: 1rem;
+        }
+        
+        .progress-track {
+            height: 20px;
+            background: #1a1a1a;
+            border: 1px solid var(--neon-green);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--neon-green), var(--neon-cyan));
+            position: relative;
+            animation: progress-glow 2s infinite alternate;
+        }
+        
+        @keyframes progress-glow {
+            from { box-shadow: 0 0 10px var(--neon-green); }
+            to { box-shadow: 0 0 20px var(--neon-cyan); }
+        }
+        
+        /* ASCII Art Banner */
+        .ascii-banner {
+            font-family: monospace;
+            font-size: 0.7rem;
+            line-height: 1.2;
+            color: var(--neon-pink);
+            text-align: center;
+            white-space: pre;
+            margin: 2rem 0;
+            overflow-x: auto;
+        }
+        
+        /* Retro Button */
+        .retro-btn {
+            display: inline-block;
+            padding: 1rem 2rem;
+            background: transparent;
+            border: 2px solid var(--neon-green);
+            color: var(--neon-green);
+            font-family: 'VT323', monospace;
+            font-size: 1.2rem;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            transition: all 0.3s;
+            text-decoration: none;
+        }
+        
+        .retro-btn:hover {
+            background: var(--neon-green);
+            color: #000;
+            box-shadow: 
+                0 0 30px var(--neon-green),
+                inset 0 0 30px rgba(0, 0, 0, 0.2);
+        }
+        
+        .retro-btn::before {
+            content: '>';
+            margin-right: 0.5rem;
+        }
+        
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding: 2rem;
+            border-top: 1px solid var(--neon-green);
+            margin-top: 2rem;
+            font-size: 0.9rem;
+            color: #666;
+        }
+        
+        .footer span {
+            color: var(--neon-amber);
+        }
+        
+        /* Glitch Effect for Headers */
+        .glitch {
+            position: relative;
+        }
+        
+        .glitch::before,
+        .glitch::after {
+            content: attr(data-text);
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        
+        .glitch::before {
+            left: 2px;
+            text-shadow: -2px 0 var(--neon-pink);
+            clip: rect(24px, 550px, 90px, 0);
+            animation: glitch-anim 3s infinite linear alternate-reverse;
+        }
+        
+        .glitch::after {
+            left: -2px;
+            text-shadow: -2px 0 var(--neon-cyan);
+            clip: rect(85px, 550px, 140px, 0);
+            animation: glitch-anim 2s infinite linear alternate-reverse;
+        }
+        
+        @keyframes glitch-anim {
+            0% { clip: rect(10px, 9999px, 85px, 0); }
+            20% { clip: rect(63px, 9999px, 130px, 0); }
+            40% { clip: rect(35px, 9999px, 70px, 0); }
+            60% { clip: rect(90px, 9999px, 145px, 0); }
+            80% { clip: rect(15px, 9999px, 55px, 0); }
+            100% { clip: rect(45px, 9999px, 100px, 0); }
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 1rem;
+            }
+            
+            .ascii-banner {
+                font-size: 0.5rem;
+            }
+            
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        /* Boot Sequence Animation */
+        .boot-sequence {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--dark-bg);
+            z-index: 2000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-family: 'VT323', monospace;
+        }
+        
+        .boot-text {
+            color: var(--neon-green);
+            font-size: 1.2rem;
+            text-align: left;
+            max-width: 600px;
+            line-height: 1.8;
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <!-- Boot Sequence -->
+    <div id="boot" class="boot-sequence">
+        <div class="boot-text" id="bootText"></div>
+    </div>
+
+    <!-- Header -->
+    <header class="header">
+        <h1 class="glitch" data-text="◄ RETRO OS v2.0 ►">◄ RETRO OS v2.0 ►</h1>
+    </header>
+
+    <div class="container">
+        <!-- ASCII Banner -->
+        <div class="ascii-banner">
+╔══════════════════════════════════════════════════════════════════╗
+║   ___  ___  _______   ___    ___ ________  ________  ________    ║
+║  |\  \|\  \|\  ___ \ |\  \  /  /|\   __  \|\   __  \|\   __  \   ║
+║  \ \  \\\  \ \   __/|\ \  \/  / | \  \|\  \ \  \|\  \ \  \|\  \  ║
+║   \ \   __  \ \  \_|/_\ \    / / \ \  \\\\  \ \   _  _\ \   __  \ ║
+║    \ \  \ \  \ \  \_|\ \\ \__/ /   \ \  \\\\  \ \  \\  \\ \  \ \  \║
+║     \ \__\ \__\ \_______\\|__|/     \ \_______\ \__\\ _\\ \__\ \__\║
+║      \|__|\|__|\|_______|   ___     \|_______|\|__|\|__|\|__|\|__|║
+╚══════════════════════════════════════════════════════════════════╝
+        </div>
+
+        <!-- Terminal -->
+        <div class="terminal">
+            <div class="terminal-header">
+                <span class="terminal-btn btn-close"></span>
+                <span class="terminal-btn btn-min"></span>
+                <span class="terminal-btn btn-max"></span>
+                <span class="terminal-title">root@retro-os:~</span>
+            </div>
+            <div class="terminal-body" id="terminalBody">
+                <div class="terminal-line">
+                    <span class="prompt">root@retro-os:~$</span> <span id="typeText"></span><span class="cursor"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Progress Bars -->
+        <div class="progress-container">
+            <div class="progress-label">
+                <span>SYSTEM LOAD</span>
+                <span>87%</span>
+            </div>
+            <div class="progress-track">
+                <div class="progress-fill" style="width: 87%"></div>
+            </div>
+        </div>
+        
+        <div class="progress-container">
+            <div class="progress-label">
+                <span>MEMORY USAGE</span>
+                <span>64%</span>
+            </div>
+            <div class="progress-track">
+                <div class="progress-fill" style="width: 64%"></div>
+            </div>
+        </div>
+
+        <!-- Cards Grid -->
+        <div class="grid">
+            <div class="card">
+                <div class="card-number">001</div>
+                <div class="card-title">System Status</div>
+                <div class="card-content">
+                    All systems operational. Core temperature: 42°C. Uptime: 42 days, 13 hours, 37 minutes.
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-number">002</div>
+                <div class="card-title">Network Activity</div>
+                <div class="card-content">
+                    Incoming: 1.337 TB | Outgoing: 0.733 TB. Active connections: 256. Latency: 7ms.
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-number">003</div>
+                <div class="card-title">Security Alert</div>
+                <div class="card-content">
+                    Firewall active. Intrusion attempts blocked: 4,294. No breaches detected since boot.
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-number">004</div>
+                <div class="card-title">Storage Status</div>
+                <div class="card-content">
+                    SSD Array: 14.7 TB / 16 TB used. RAID integrity: 100%. Backup scheduled at 03:00.
+                </div>
+            </div>
+        </div>
+
+        <!-- Action Button -->
+        <div style="text-align: center; margin: 3rem 0;">
+            <button class="retro-btn" onclick="executeCommand()">Initialize Sequence</button>
+        </div>
+
+        <!-- History Log -->
+        <div class="terminal">
+            <div class="terminal-header">
+                <span class="terminal-btn btn-close"></span>
+                <span class="terminal-btn btn-min"></span>
+                <span class="terminal-btn btn-max"></span>
+                <span class="terminal-title">/var/log/system.log</span>
+            </div>
+            <div class="terminal-body" id="logBody" style="font-size: 1rem; line-height: 1.8;">
+                <div class="terminal-line">[INFO] System initialized at 19:84:00 UTC</div>
+                <div class="terminal-line">[INFO] Loading kernel modules...</div>
+                <div class="terminal-line">[OK] Kernel 5.7.22-retro loaded successfully</div>
+                <div class="terminal-line">[INFO] Mounting filesystems...</div>
+                <div class="terminal-line">[OK] /dev/sda1 mounted at /</div>
+                <div class="terminal-line">[INFO] Starting services...</div>
+                <div class="terminal-line">[OK] Network service started</div>
+                <div class="terminal-line">[OK] Firewall daemon active</div>
+                <div class="terminal-line">[OK] SSH server listening on port 22</div>
+                <div class="terminal-line"><span style="color: var(--neon-cyan);">[SUCCESS] Boot sequence completed in 2.4s</span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <p>RETRO OS v2.0 // BUILD 1984.07.22</p>
+        <p><span>[</span> SYSTEM READY <span>]</span> | CONNECTED TO MAINFRAME</p>
+        <p style="margin-top: 1rem; font-size: 0.8rem;">© 1984-2099 CYBERDYNE SYSTEMS</p>
+    </footer>
+
+    <script>
+        // Boot sequence
+        const bootText = document.getElementById('bootText');
+        const bootScreen = document.getElementById('boot');
+        const bootLines = [
+            "BIOS Date 07/22/84 14:22:55 Ver 1.23",
+            "CPU: RETRO-88 @ 4.77MHz",
+            "Detecting HDD...",
+            "Primary Master: RETRO SSD 16TB",
+            "Checking NVRAM...",
+            "Loading Operating System...",
+            "RETRO OS v2.0",
+            "Copyright (c) 1984-2099 Cyberdyne Systems",
+            "",
+            "Initializing kernel...",
+            "Loading device drivers...",
+            "Mounting file systems...",
+            "Starting services...",
+            "",
+            ">>> SYSTEM READY <<<",
+            "",
+            "Press any key to continue..."
+        ];
+        
+        let lineIndex = 0;
+        function showBootLine() {
+            if (lineIndex < bootLines.length) {
+                bootText.innerHTML += bootLines[lineIndex] + '<br>';
+                lineIndex++;
+                setTimeout(showBootLine, 150);
+            }
+        }
+        
+        showBootLine();
+        
+        // Hide boot screen on key press
+        document.addEventListener('keydown', () => {
+            if (!bootScreen.classList.contains('hidden')) {
+                bootScreen.classList.add('hidden');
+                startTypewriter();
+            }
+        });
+        
+        document.addEventListener('click', () => {
+            if (!bootScreen.classList.contains('hidden')) {
+                bootScreen.classList.add('hidden');
+                startTypewriter();
+            }
+        });
+        
+        // Typewriter effect
+        const typeText = document.getElementById('typeText');
+        const commands = [
+            'neofetch',
+            'loading retro_os kernel...',
+            'initializing graphics subsystem...',
+            'mounting virtual filesystem...',
+            'established connection to mainframe'
+        ];
+        let cmdIndex = 0;
+        let charIndex = 0;
+        
+        function startTypewriter() {
+            typeCommand();
+        }
+        
+        function typeCommand() {
+            if (cmdIndex >= commands.length) {
+                cmdIndex = 0;
+            }
+            
+            const currentCmd = commands[cmdIndex];
+            
+            if (charIndex < currentCmd.length) {
+                typeText.textContent += currentCmd[charIndex];
+                charIndex++;
+                setTimeout(typeCommand, 50);
+            } else {
+                setTimeout(() => {
+                    typeText.textContent = '';
+                    charIndex = 0;
+                    cmdIndex++;
+                    typeCommand();
+                }, 2000);
+            }
+        }
+        
+        // Execute button animation
+        function executeCommand() {
+            const logBody = document.getElementById('logBody');
+            const timestamp = new Date().toLocaleTimeString('en-US', { hour12: false });
+            
+            const newLines = [
+                `<div class="terminal-line">[${timestamp}] <span style="color: var(--neon-amber);">SEQUENCE INITIATED</span></div>`,
+                `<div class="terminal-line">[${timestamp}] Analyzing system components...</div>`,
+                `<div class="terminal-line">[${timestamp}] Running diagnostics...</div>`,
+                `<div class="terminal-line">[${timestamp}] <span style="color: var(--neon-pink);">WARNING: Neural network synchronization detected</span></div>`,
+                `<div class="terminal-line">[${timestamp}] <span style="color: var(--neon-cyan);">[SUCCESS] All systems nominal</span></div>`
+            ];
+            
+            newLines.forEach((line, i) => {
+                setTimeout(() => {
+                    logBody.innerHTML += line;
+                    logBody.scrollTop = logBody.scrollHeight;
+                }, i * 300);
+            });
+        }
+        
+        // Random glitch effect
+        setInterval(() => {
+            const cards = document.querySelectorAll('.card');
+            const randomCard = cards[Math.floor(Math.random() * cards.length)];
+            randomCard.style.transform = 'translateX(2px)';
+            setTimeout(() => {
+                randomCard.style.transform = '';
+            }, 50);
+        }, 5000);
+        
+        // Matrix rain effect on background (subtle)
+        const chars = '01アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン';
+        setInterval(() => {
+            const card = document.querySelectorAll('.card')[Math.floor(Math.random() * 4)];
+            if (card) {
+                const char = document.createElement('span');
+                char.textContent = chars[Math.floor(Math.random() * chars.length)];
+                char.style.cssText = `
+                    position: absolute;
+                    color: rgba(0, 255, 65, 0.3);
+                    font-size: 10px;
+                    left: ${Math.random() * 100}%;
+                    top: ${Math.random() * 100}%;
+                    pointer-events: none;
+                `;
+                card.appendChild(char);
+                setTimeout(() => char.remove(), 2000);
+            }
+        }, 500);
+    </script>
+</body>
+</html>

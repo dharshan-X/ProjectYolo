@@ -22,7 +22,8 @@ _background_tasks: set[asyncio.Task] = set()
 def _is_allowed_user(user_id: int) -> bool:
     raw = os.getenv("DISCORD_ALLOWED_USER_IDS", "").strip()
     if not raw:
-        return True
+        logger.warning("DISCORD_ALLOWED_USER_IDS is empty; access denied.")
+        return False
     allowed = {int(v.strip()) for v in raw.split(",") if v.strip()}
     return user_id in allowed
 
@@ -45,7 +46,7 @@ class ConfirmationView(discord.ui.View):
         async with lock:
             try:
                 response = await agent.resolve_confirmations(
-                    self.session, self.user_id, signal_handler=None, confirm_all=True
+                    self.session, self.user_id, signal_handler=None, confirm_all=True, memory_service=self.session_manager.memory
                 )
                 self.session_manager.save(self.user_id)
                 await interaction.followup.send(response)
@@ -135,6 +136,11 @@ class DiscordYoloClient(discord.Client):
 async def run_discord_gateway() -> None:
     if not DISCORD_BOT_TOKEN:
         logger.warning("DISCORD_BOT_TOKEN not set; Discord gateway disabled.")
+        return
+
+    raw_ids = os.getenv("DISCORD_ALLOWED_USER_IDS", "").strip()
+    if not raw_ids:
+        logger.error("DISCORD_ALLOWED_USER_IDS is not set or empty. Refusing to start Discord gateway for security reasons.")
         return
 
     session_manager = SessionManager(

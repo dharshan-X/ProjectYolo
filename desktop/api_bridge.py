@@ -96,7 +96,13 @@ async def bridge_security_middleware(request: web.Request, handler):
         return await handler(request)
 
     if request.path.startswith(("/artifacts/", "/uploads/")):
-        return await handler(request)
+        is_local = request.remote in {"127.0.0.1", "::1"}
+        if is_local:
+            return await handler(request)
+        token = request.headers.get("X-Yolo-Bridge-Token", "") or request.query.get("token", "")
+        if token and hmac.compare_digest(token, BRIDGE_TOKEN):
+            return await handler(request)
+        return web.json_response({"error": "Unauthorized static access"}, status=401)
 
     origin = request.headers.get("Origin")
     if origin and origin not in ALLOWED_ORIGINS:
@@ -485,7 +491,7 @@ async def handle_confirm(request: web.Request) -> web.Response:
             if confirmed:
                 # We currently only support single-confirm via the desktop UI
                 response = await yolo_agent.resolve_confirmations(
-                    session, user_id, signal_handler=None, confirm_all=False
+                    session, user_id, signal_handler=None, confirm_all=False, memory_service=session_manager.memory
                 )
             else:
                 await yolo_agent.deny_confirmations(session, deny_all=False)

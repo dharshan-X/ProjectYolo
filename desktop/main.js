@@ -181,7 +181,10 @@ function createWindow() {
     },
     frame: process.platform === 'darwin' ? false : true,
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    autoHideMenuBar: true,
   });
+
+  Menu.setApplicationMenu(null);
 
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   
@@ -206,18 +209,6 @@ function createWindow() {
     if (input.control && (input.key.toLowerCase() === 'y' || (input.shift && input.key.toLowerCase() === 'z'))) {
       mainWindow.webContents.redo();
       event.preventDefault();
-    }
-    if (input.control && input.key.toLowerCase() === 'c') {
-      mainWindow.webContents.copy();
-    }
-    if (input.control && input.key.toLowerCase() === 'v') {
-      mainWindow.webContents.paste();
-    }
-    if (input.control && input.key.toLowerCase() === 'x') {
-      mainWindow.webContents.cut();
-    }
-    if (input.control && input.key.toLowerCase() === 'a') {
-      mainWindow.webContents.selectAll();
     }
   });
 
@@ -505,8 +496,9 @@ ipcMain.handle('open-external', async (_event, url) => {
 ipcMain.handle('open-path', async (_event, filePath) => {
   // Basic validation: must be absolute and not contain traversal
   const resolved = path.resolve(filePath);
-  if (resolved !== filePath && !resolved.startsWith(path.resolve(filePath))) {
-    return { error: 'Path validation failed' };
+  const projectRoot = path.resolve(__dirname, '..');
+  if (!resolved.startsWith(projectRoot)) {
+    return { error: 'Access denied: path is outside project root' };
   }
   const err = await shell.openPath(resolved);
   if (err) return { error: err };
