@@ -4445,15 +4445,15 @@ body::before {
 
 
 /* ══════════════════════════════════════════════
-   CAT MASCOT — Mochi
+   MEW MASCOT
    ══════════════════════════════════════════════ */
 
 #cat-mascot {
   position: absolute;
-  top: -48px;          /* Cat paws rest directly on top of the text input bar border */
+  top: -62px;          /* Cat paws rest directly on top of the text input bar border */
   right: 20px;         /* Positioned directly above the send button area */
-  width: 54px;
-  height: 54px;
+  width: 68px;
+  height: 68px;
   z-index: 100;
   cursor: pointer;
   user-select: none;
@@ -4461,13 +4461,9 @@ body::before {
   filter: drop-shadow(0 2px 6px rgba(0,0,0,0.18));
 }
 
-#cat-mascot:hover {
-  transform: scale(1.1) translateY(-2px);
-}
-
 #cat-img {
-  width: 54px;
-  height: 54px;
+  width: 68px;
+  height: 68px;
   object-fit: contain;
   object-position: center bottom;
   display: block;
@@ -4479,13 +4475,74 @@ body::before {
 }
 
 /* State: sent — jump up */
-#cat-mascot.cat-sent {
+#cat-mascot.cat-sent #cat-img {
   animation: cat-jump 0.5s cubic-bezier(0.36,0.07,0.19,0.97) forwards;
 }
 
 /* State: happy — wiggle */
-#cat-mascot.cat-happy {
+#cat-mascot.cat-happy #cat-img {
   animation: cat-wiggle 0.6s ease forwards;
+}
+
+/* State: sleeping — gentle breathing bobbing */
+#cat-mascot.cat-sleeping #cat-img {
+  animation: cat-sleep-breath 3s ease-in-out infinite;
+}
+
+/* State: typing — quick excited bobbing */
+#cat-mascot.cat-typing #cat-img {
+  animation: cat-type-bob 0.8s ease-in-out infinite;
+}
+
+/* State: dizzy — shaking */
+#cat-mascot.cat-dizzy #cat-img {
+  animation: cat-dizzy-shake 0.4s ease-in-out infinite;
+}
+
+/* State: eating — chewing */
+#cat-mascot.cat-eating #cat-img {
+  animation: cat-eating-chew 0.5s ease-in-out infinite;
+}
+
+/* State: dance — spinning and bouncing */
+#cat-mascot.cat-dance #cat-img {
+  animation: cat-dance-spin 1.2s ease-in-out infinite;
+}
+
+/* State: coding — quick subtle tapping wobble */
+#cat-mascot.cat-coding #cat-img {
+  animation: cat-coding-tap 0.2s ease-in-out infinite;
+}
+
+@keyframes cat-sleep-breath {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(4px) scale(0.97); }
+}
+
+@keyframes cat-type-bob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-3px) scale(1.03); }
+}
+
+@keyframes cat-dizzy-shake {
+  0%, 100% { transform: translateX(0); }
+  25%      { transform: translateX(-2px) rotate(-3deg); }
+  75%      { transform: translateX(2px) rotate(3deg); }
+}
+
+@keyframes cat-eating-chew {
+  0%, 100% { transform: scaleY(1); }
+  50%      { transform: scaleY(0.88) translateY(3px); }
+}
+
+@keyframes cat-dance-spin {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50%      { transform: translateY(-10px) rotate(180deg); }
+}
+
+@keyframes cat-coding-tap {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50%      { transform: translateY(-1px) rotate(1deg); }
 }
 
 /* Jump on send */
@@ -4510,7 +4567,7 @@ body::before {
 /* Speech bubble */
 .cat-bubble {
   position: absolute;
-  bottom: 74px;
+  bottom: 88px;
   right: 0;
   background: var(--bg-surface, #ffffff);
   color: var(--text-primary, #1a1a2e);

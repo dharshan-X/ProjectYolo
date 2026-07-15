@@ -1969,8 +1969,15 @@
       disconnected: 'Starting engine...',
     };
     dom.statusText.textContent = labels[status] || labels.connecting;
-    if (status === 'connected') setTimeout(() => dom.statusBar.classList.add('hidden'), 3000);
-    else dom.statusBar.classList.remove('hidden');
+    if (status === 'connected') {
+      setTimeout(() => dom.statusBar.classList.add('hidden'), 3000);
+      if (window.setMascotState) window.setMascotState('idle');
+    } else {
+      dom.statusBar.classList.remove('hidden');
+      if (status === 'disconnected' && window.setMascotState) {
+        window.setMascotState('cat-dizzy');
+      }
+    }
   }
 
   // ── Utilities ──
@@ -2714,7 +2721,7 @@
 })();
 
 /* ═══════════════════════════════════════════
-   🐱 CAT MASCOT — Mochi (Multi-State Controller)
+   ✨ MEW MASCOT (Multi-State Controller)
    ═══════════════════════════════════════════ */
 (function initCatMascot() {
   const mascot  = document.getElementById('cat-mascot');
@@ -2733,20 +2740,41 @@
   let currentState = 'idle';
 
   const spriteMap = {
-    'cat-thinking': 'assets/mascot_cat_thinking.png',
-    'cat-sent':     'assets/mascot_cat_sent.png',
-    'cat-happy':    'assets/mascot_cat_happy.png',
-    'idle':         'assets/mascot_cat.png'
+    'cat-thinking': 'assets/mascot_mew_thinking.png',
+    'cat-sent':     'assets/mascot_mew_sent.png',
+    'cat-happy':    'assets/mascot_mew_happy.png',
+    'cat-sleeping': 'assets/mascot_mew_sleeping.png',
+    'cat-typing':   'assets/mascot_mew_typing.png',
+    'cat-dizzy':    'assets/mascot_mew_dizzy.png',
+    'cat-eating':   'assets/mascot_mew_eating.png',
+    'cat-dance':    'assets/mascot_mew_dance.png',
+    'cat-coding':   'assets/mascot_mew_coding.png',
+    'idle':         'assets/mascot_mew.png'
   };
 
   const idleSayings = [
-    'Meow~ 🐾', 'Purrrr...', 'Pet me!', '...zzz 😴',
-    "I'm watching 👀", 'Mrow?', '*kneads keyboard*',
-    '*knocks cup off table*', 'Feed me data 🐟',
-    'Got bugs? I\'ll catch them 🐛',
+    'Mew~ ✨', 'Mew? 🐾', 'Floating around...', '*teleports behind you*',
+    "I'm watching 👀", 'Mew! 💕', '*uses Metronome*',
+    '*bubbles float up*', 'Feed me code 🍬',
+    'Got bugs? I\'ll psychic them away 🧠',
   ];
-  const thinkingSayings = ['Hmm... 🤔', 'Thinking hard...', 'One sec! ⚡'];
-  const happySayings    = ['Here you go! ✨', 'Done! 🐾', 'Meow! 😸', 'Purrfect! 🐱'];
+  const thinkingSayings = [
+    'Hmm... 🤔', 'Using Psychic... 🧠', 'Teleporting answers... ⚡',
+    'Writing some code... 💻', 'Compiling thoughts... ⚙️', 'Debugging... 🐛'
+  ];
+  const happySayings    = ['Here you go! ✨', 'Mew! 💖', 'Mew mew! 😸', 'Purrfect! 🌟'];
+  const sleepingSayings = ['Zzz... 😴', 'Mew... *dreams* 💭', '*snores softly* 💤', '...zzz'];
+  const eatingSayings   = ['Nom nom nom... 🍓', 'Sweet! 🍬', 'Yummy! 🍪', 'Munch munch... 🍒'];
+  const danceSayings    = ['Woohoo! 🎵', 'Spin spin! 🎶', 'Mew-tastic! 💃', 'Feeling the beat! 🎸'];
+
+  let lastInteractionTime = Date.now();
+  function resetInteraction() {
+    lastInteractionTime = Date.now();
+    if (currentState === 'cat-sleeping') {
+      setState('idle');
+      showBubble("Yawwn... I'm awake! ☀️", 2000);
+    }
+  }
 
   function showBubble(text, duration) {
     if (bubbleTimer) clearTimeout(bubbleTimer);
@@ -2764,7 +2792,10 @@
 
   function setState(state) {
     currentState = state || 'idle';
-    mascot.classList.remove('cat-thinking', 'cat-sent', 'cat-happy');
+    mascot.classList.remove(
+      'cat-thinking', 'cat-sent', 'cat-happy', 'cat-sleeping', 
+      'cat-typing', 'cat-dizzy', 'cat-eating', 'cat-dance', 'cat-coding'
+    );
     if (state && state !== 'idle') {
       mascot.classList.add(state);
     }
@@ -2773,26 +2804,55 @@
     }
   }
 
+  // Expose state setter globally so other modules can trigger dizzy, etc.
+  window.setMascotState = setState;
+
   function rand(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
-  // ── State 4: Happy on click ──
+  // ── State 4: Happy/Eating/Dance on click ──
   mascot.addEventListener('click', () => {
+    resetInteraction();
     if (happyTimer) clearTimeout(happyTimer);
-    setState('cat-happy');
-    showBubble(rand(idleSayings), 2500);
+    
+    const roll = Math.random();
+    if (roll < 0.5) {
+      setState('cat-happy');
+      showBubble(rand(idleSayings), 2500);
+    } else if (roll < 0.75) {
+      setState('cat-eating');
+      showBubble(rand(eatingSayings), 2500);
+    } else {
+      setState('cat-dance');
+      showBubble(rand(danceSayings), 2500);
+    }
+    
     happyTimer = setTimeout(() => {
-      setState(isThinking ? 'cat-thinking' : 'idle');
+      setState(isThinking ? (Math.random() < 0.5 ? 'cat-thinking' : 'cat-coding') : 'idle');
     }, 2500);
   });
+  mascot.addEventListener('mouseenter', resetInteraction);
 
   // ── State 3: Sent / Excited on send ──
   function onSend() {
+    resetInteraction();
+    const text = inputEl ? inputEl.value.trim().toLowerCase() : '';
+    if (text === '/feed' || text === 'feed') {
+      if (inputEl) inputEl.value = '';
+      if (happyTimer) clearTimeout(happyTimer);
+      setState('cat-eating');
+      showBubble(rand(eatingSayings), 3000);
+      happyTimer = setTimeout(() => {
+        setState(isThinking ? (Math.random() < 0.5 ? 'cat-thinking' : 'cat-coding') : 'idle');
+      }, 3000);
+      return;
+    }
+    
     if (happyTimer) clearTimeout(happyTimer);
     setState('cat-sent');
     showBubble('On it! 🐾', 1000);
     setTimeout(() => {
       if (isThinking) {
-        setState('cat-thinking');
+        setState(Math.random() < 0.5 ? 'cat-thinking' : 'cat-coding');
         showBubble(rand(thinkingSayings));
       } else {
         setState('idle');
@@ -2801,10 +2861,26 @@
   }
 
   if (sendBtn) sendBtn.addEventListener('click', onSend);
+  
+  let typingTimer = null;
   if (inputEl) {
     inputEl.addEventListener('keydown', e => {
       if (e.key === 'Enter' && !e.shiftKey) onSend();
     });
+    inputEl.addEventListener('input', () => {
+      resetInteraction();
+      if (isThinking || currentState === 'cat-sent') return;
+      if (typingTimer) clearTimeout(typingTimer);
+      if (currentState !== 'cat-typing' && currentState !== 'cat-happy') {
+        setState('cat-typing');
+      }
+      typingTimer = setTimeout(() => {
+        if (!isThinking && currentState === 'cat-typing') {
+          setState('idle');
+        }
+      }, 2000);
+    });
+    inputEl.addEventListener('focus', resetInteraction);
   }
 
   // ── State 2 (Thinking) & State 4 (Happy on response) via Observer ──
@@ -2813,13 +2889,18 @@
       const thinking = !stopBtn.classList.contains('hidden');
       if (thinking && !isThinking) {
         isThinking = true;
-        setState('cat-thinking');
+        const action = Math.random() < 0.5 ? 'cat-thinking' : 'cat-coding';
+        setState(action);
         showBubble(rand(thinkingSayings));
       } else if (!thinking && isThinking) {
         isThinking = false;
         if (happyTimer) clearTimeout(happyTimer);
-        setState('cat-happy');
-        showBubble(rand(happySayings), 2800);
+        
+        // Randomly dance or look happy on response
+        const action = Math.random() < 0.3 ? 'cat-dance' : 'cat-happy';
+        setState(action);
+        showBubble(action === 'cat-dance' ? rand(danceSayings) : rand(happySayings), 2800);
+        
         happyTimer = setTimeout(() => {
           setState('idle');
         }, 2800);
@@ -2828,17 +2909,29 @@
     obs.observe(stopBtn, { attributes: true, attributeFilter: ['class'] });
   }
 
-  // Idle chatter every ~45s
+  // Idle chatter or sleeping snores
   function scheduleIdle() {
     idleTimer = setTimeout(() => {
-      if (!isThinking && currentState === 'idle') {
-        showBubble(rand(idleSayings), 2800);
+      if (!isThinking) {
+        if (currentState === 'idle') {
+          showBubble(rand(idleSayings), 2800);
+        } else if (currentState === 'cat-sleeping') {
+          showBubble(rand(sleepingSayings), 2800);
+        }
       }
       scheduleIdle();
     }, 45000 + Math.random() * 20000);
   }
   scheduleIdle();
 
+  // Sleep checker (after 45s of inactivity)
+  setInterval(() => {
+    if (!isThinking && currentState === 'idle' && (Date.now() - lastInteractionTime > 45000)) {
+      setState('cat-sleeping');
+      showBubble(rand(sleepingSayings), 3000);
+    }
+  }, 5000);
+
   // Initial greeting
-  setTimeout(() => showBubble("Hello! I'm Mochi 🐱", 3200), 1500);
+  setTimeout(() => showBubble("Hello! I'm Mew ✨", 3200), 1500);
 })();
