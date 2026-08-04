@@ -23,7 +23,7 @@ def verify_transition(state_before: GUIState, state_after: GUIState) -> Tuple[bo
         return True, "Significant change in visible UI elements detected"
 
     # As a fallback for clicks that don't change state (e.g. focusing a text box)
-    return True, "No major structural change detected, but assuming local element update."
+    return False, "No observable UI transition was detected."
 
 def format_error(reason: str, message: str, context: Optional[Dict[str, Any]] = None) -> str:
     return json.dumps({

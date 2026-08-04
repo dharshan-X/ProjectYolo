@@ -354,3 +354,59 @@
 {"timestamp": "2026-07-12T15:27:08.925033", "tool": "tool_result", "args": {"user_id": 42, "name": "security_kwargs_tool"}, "status": "success", "detail": "ok"}
 {"timestamp": "2026-07-12T15:27:08.994834", "tool": "adjust_rate_limiting", "args": {"rpm_limit": 50}, "status": "success", "detail": "Rate limit set to 50 RPM"}
 {"timestamp": "2026-07-12T15:27:08.997404", "tool": "gui_mouse_click", "args": {"button": "left", "clicks": 1, "x": 805, "y": 801}, "status": "success", "detail": "Mouse clicked at (805, 801)"}
+{"timestamp": "2026-08-04T04:30:12.756796", "tool": "agent", "args": {"user_id": 1}, "status": "COMPACT", "detail": "Compacting history (12 messages)..."}
+{"timestamp": "2026-08-04T04:30:12.757036", "tool": "agent", "args": {"user_id": 1}, "status": "COMPACT", "detail": "History successfully compacted."}
+{"timestamp": "2026-08-04T04:30:12.759988", "tool": "agent", "args": {"user_id": 1}, "status": "COMPACT", "detail": "Compacting history (15 messages)..."}
+{"timestamp": "2026-08-04T04:30:12.760190", "tool": "agent", "args": {"user_id": 1}, "status": "COMPACT", "detail": "History successfully compacted."}
+{"timestamp": "2026-08-04T04:30:12.762866", "tool": "agent", "args": {"user_id": 1}, "status": "COMPACT", "detail": "Compacting history (15 messages)..."}
+{"timestamp": "2026-08-04T04:30:12.763038", "tool": "agent", "args": {"user_id": 1}, "status": "ERROR", "detail": "Failed to compact history: LLM Down"}
+{"timestamp": "2026-08-04T04:30:12.765075", "tool": "tool_call", "args": {"user_id": 123, "name": "chaos_success", "args": {"arg1": "hello"}}, "status": "info", "detail": ""}
+{"timestamp": "2026-08-04T04:30:12.765977", "tool": "tool_result", "args": {"user_id": 123, "name": "chaos_success"}, "status": "success", "detail": "Success: hello, default"}
+{"timestamp": "2026-08-04T04:30:12.767897", "tool": "tool_call", "args": {"user_id": 123, "name": "chaos_success", "args": {"arg1": "json"}}, "status": "info", "detail": ""}
+{"timestamp": "2026-08-04T04:30:12.768550", "tool": "tool_result", "args": {"user_id": 123, "name": "chaos_success"}, "status": "success", "detail": "Success: json, default"}
+{"timestamp": "2026-08-04T04:30:12.770474", "tool": "tool_call", "args": {"user_id": 123, "name": "chaos_success"}, "status": "error", "detail": "Invalid JSON arguments: Expecting ',' delimiter: line 1 column 16 (char 15)"}
+{"timestamp": "2026-08-04T04:30:12.772259", "tool": "tool_call", "args": {"user_id": 123, "name": "non_existent_tool", "args": {}}, "status": "info", "detail": ""}
+{"timestamp": "2026-08-04T04:30:12.772409", "tool": "tool_result", "args": {"user_id": 123, "name": "non_existent_tool"}, "status": "error", "detail": "not found"}
+{"timestamp": "2026-08-04T04:30:12.774085", "tool": "tool_call", "args": {"user_id": 123, "name": "chaos_error", "args": {}}, "status": "info", "detail": ""}
+{"timestamp": "2026-08-04T04:30:12.774654", "tool": "tool_result", "args": {"user_id": 123, "name": "chaos_error"}, "status": "error", "detail": "Error in chaos_error: Chaos error happened"}
+{"timestamp": "2026-08-04T04:30:12.776654", "tool": "tool_call", "args": {"user_id": 123, "name": "chaos_return_non_str", "args": {}}, "status": "info", "detail": ""}
+{"timestamp": "2026-08-04T04:30:12.777289", "tool": "tool_result", "args": {"user_id": 123, "name": "chaos_return_non_str"}, "status": "success", "detail": "{'status': 'ok', 'value': 42}"}
+{"timestamp": "2026-08-04T04:30:12.779071", "tool": "tool_call", "args": {"user_id": 123, "name": "chaos_transient_error", "args": {}}, "status": "info", "detail": ""}
+{"timestamp": "2026-08-04T04:30:12.779595", "tool": "tool_retry", "args": {"user_id": 123, "name": "chaos_transient_error", "attempt": 1}, "status": "error", "detail": "Transient failure; retrying in 0.5s"}
+{"timestamp": "2026-08-04T04:30:13.281180", "tool": "tool_result", "args": {"user_id": 123, "name": "chaos_transient_error"}, "status": "success", "detail": "Recovered"}
+{"timestamp": "2026-08-04T04:30:13.284139", "tool": "tool_call", "args": {"user_id": 123, "name": "chaos_injection", "args": {}}, "status": "info", "detail": ""}
+{"timestamp": "2026-08-04T04:30:13.285311", "tool": "tool_result", "args": {"user_id": 123, "name": "chaos_injection"}, "status": "success", "detail": "Injected: 123"}
+{"timestamp": "2026-08-04T04:30:13.290563", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "write something"}
+{"timestamp": "2026-08-04T04:30:13.290687", "tool": "agent", "args": {"user_id": 1}, "status": "THINKING", "detail": "Consulting LLM..."}
+{"timestamp": "2026-08-04T04:30:13.297048", "tool": "agent", "args": {"user_id": 1}, "status": "RESUME", "detail": "Completing turn with 1 tool calls..."}
+{"timestamp": "2026-08-04T04:30:13.298061", "tool": "agent", "args": {"user_id": 1}, "status": "THINKING", "detail": "Consulting LLM..."}
+{"timestamp": "2026-08-04T04:30:13.305617", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "do both"}
+{"timestamp": "2026-08-04T04:30:13.305725", "tool": "agent", "args": {"user_id": 1}, "status": "THINKING", "detail": "Consulting LLM..."}
+{"timestamp": "2026-08-04T04:30:13.311669", "tool": "agent", "args": {"user_id": 1}, "status": "RESUME", "detail": "Completing turn with 2 tool calls..."}
+{"timestamp": "2026-08-04T04:30:14.327447", "tool": "tool_call", "args": {"user_id": 1, "name": "dummy_tool", "args": {"arg1": "value"}}, "status": "info", "detail": ""}
+{"timestamp": "2026-08-04T04:30:14.328480", "tool": "tool_result", "args": {"user_id": 1, "name": "dummy_tool"}, "status": "success", "detail": "tool output"}
+{"timestamp": "2026-08-04T04:30:14.330581", "tool": "tool_call", "args": {"user_id": 1, "name": "dummy_tool"}, "status": "error", "detail": "Invalid JSON arguments: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)"}
+{"timestamp": "2026-08-04T04:30:14.333556", "tool": "agent", "args": {"user_id": 1}, "status": "COMPACT", "detail": "Compacting history (12 messages)..."}
+{"timestamp": "2026-08-04T04:30:14.333726", "tool": "agent", "args": {"user_id": 1}, "status": "COMPACT", "detail": "History successfully compacted."}
+{"timestamp": "2026-08-04T04:30:14.336569", "tool": "agent", "args": {"user_id": 1}, "status": "SYSTEM", "detail": "Context overflow detected. Attempting to compress context..."}
+{"timestamp": "2026-08-04T04:30:14.339050", "tool": "agent", "args": {"user_id": 1}, "status": "ZIP", "detail": "Zipped message content of role 'tool' (100 -> 110 chars) to avoid usage limits."}
+{"timestamp": "2026-08-04T04:30:14.345305", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "Deeply refactor this multi-step architecture"}
+{"timestamp": "2026-08-04T04:30:14.345492", "tool": "agent", "args": {"user_id": 1}, "status": "IN", "detail": "say hello"}
+{"timestamp": "2026-08-04T04:30:14.359598", "tool": "agent", "args": {"user_id": 1}, "status": "RETRY", "detail": "LLM returned an empty stream; retrying the round."}
+{"timestamp": "2026-08-04T04:30:14.360057", "tool": "agent", "args": {"user_id": 1}, "status": "RETRY", "detail": "LLM returned an empty stream; retrying the round."}
+{"timestamp": "2026-08-04T04:30:14.364287", "tool": "agent", "args": {"user_id": 1}, "status": "RESUME", "detail": "Completing turn with 1 tool calls..."}
+{"timestamp": "2026-08-04T04:30:14.399009", "tool": "edit_file", "args": {"path": "g.txt"}, "status": "success", "detail": ""}
+{"timestamp": "2026-08-04T04:30:14.458424", "tool": "schedule_task", "args": {"task": "Backup database", "interval": 60}, "status": "success", "detail": ""}
+{"timestamp": "2026-08-04T04:30:14.458594", "tool": "schedule_daily_task", "args": {"task": "Daily report", "interval": 1440}, "status": "success", "detail": ""}
+{"timestamp": "2026-08-04T04:30:14.458868", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}
+{"timestamp": "2026-08-04T04:30:14.459024", "tool": "cancel_scheduled_task", "args": {"id": 1, "user_id": 456}, "status": "success", "detail": ""}
+{"timestamp": "2026-08-04T04:30:14.459235", "tool": "get_scheduled_tasks", "args": {}, "status": "success", "detail": ""}
+{"timestamp": "2026-08-04T04:30:15.919191", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "pattern": "matching message", "timeout": 1}, "status": "info", "detail": ""}
+{"timestamp": "2026-08-04T04:30:15.919521", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "pattern": "matches here", "timeout": 3}, "status": "info", "detail": ""}
+{"timestamp": "2026-08-04T04:30:16.920771", "tool": "wait_for_swarm_message", "args": {"swarm_id": "swarm_wait_test", "status": "matched"}, "status": "success", "detail": ""}
+{"timestamp": "2026-08-04T04:30:17.097602", "tool": "tool_call", "args": {"user_id": 42, "name": "security_contextual_tool", "args": {"user_id": 999, "session": "model-session", "router": "model-router", "confirm_func": "<redacted>"}}, "status": "info", "detail": ""}
+{"timestamp": "2026-08-04T04:30:17.097800", "tool": "tool_result", "args": {"user_id": 42, "name": "security_contextual_tool"}, "status": "success", "detail": "ok"}
+{"timestamp": "2026-08-04T04:30:17.100021", "tool": "tool_call", "args": {"user_id": 42, "name": "security_kwargs_tool", "args": {"user_id": 999, "session": "model-session", "router": "model-router", "confirm_func": "<redacted>", "ordinary": "unchanged"}}, "status": "info", "detail": ""}
+{"timestamp": "2026-08-04T04:30:17.100197", "tool": "tool_result", "args": {"user_id": 42, "name": "security_kwargs_tool"}, "status": "success", "detail": "ok"}
+{"timestamp": "2026-08-04T04:30:44.699687", "tool": "adjust_rate_limiting", "args": {"rpm_limit": 50}, "status": "success", "detail": "Rate limit set to 50 RPM"}
+{"timestamp": "2026-08-04T04:30:44.702544", "tool": "gui_mouse_click", "args": {"button": "left", "clicks": 1, "x": 805, "y": 801}, "status": "success", "detail": "Mouse clicked at (805, 801)"}

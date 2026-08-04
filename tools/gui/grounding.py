@@ -63,8 +63,16 @@ def ground_element(
                 window_score = 1.0
         score += config.weight_window * window_score
 
-        # Spatial score can be added later if spatial hints provided in query
-        spatial_score = 0.5
+        # Parse spatial hints from query_text if any (e.g. "top left", "bottom")
+        spatial_score = 0.0
+        q_lower = query_text.lower()
+        if "top" in q_lower and el.bounds.y < 300: spatial_score += 0.5
+        if "bottom" in q_lower and el.bounds.y > 600: spatial_score += 0.5
+        if "left" in q_lower and el.bounds.x < 300: spatial_score += 0.5
+        if "right" in q_lower and el.bounds.x > 600: spatial_score += 0.5
+        if "top" not in q_lower and "bottom" not in q_lower and "left" not in q_lower and "right" not in q_lower:
+            spatial_score = 0.5 # Default neutral if no hint
+
         score += config.weight_spatial * spatial_score
 
         scored_candidates.append((score, el))

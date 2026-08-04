@@ -1,21 +1,21 @@
 # GUI INTERACTION PROTOCOL (V2 TRANSACTIONAL)
 
-**Context**: You are operating a real graphical user interface on the host machine. You cannot see the screen natively. You rely entirely on perception tools (`gui_analyze_screen`, `gui_find_element`, etc.) to understand the UI state. Hallucinating elements or coordinates will cause failures.
+**Context**: You are operating a real graphical user interface on the host machine. You cannot see the screen natively. You rely entirely on perception tools (`gui_observe`, `gui_find`, etc.) to understand the UI state. Hallucinating elements or coordinates will cause failures.
 
 ---
 
 ## Golden Rules (Mandatory)
 
 ### 1. Perceive Before Acting
-- **You MUST call `gui_analyze_screen` BEFORE making any GUI decisions.**
+- **You MUST call `gui_observe` BEFORE making any GUI decisions.**
 - The tool returns structured JSON containing a `state_id`, active windows, and visible elements.
 
 ### 2. Target by Exact Text
-- **ALWAYS use `gui_find_element` or `gui_click_element` with the EXACT text label from your screen analysis.**
+- **ALWAYS use `gui_find` or `gui_action` with the EXACT text label from your screen analysis.**
 - Do not use raw coordinates (`gui_mouse_move`) unless there is absolutely no other way. The new action system uses multi-factor bounding and semantic grounding.
 
 ### 3. Verification is Automatic
-- Calls to `gui_click_element`, `gui_type_text`, etc., now run internally as a transaction: **Observe -> Ground -> Act -> Stabilize -> Verify**.
+- Calls to `gui_action`, `gui_type_text`, etc., now run internally as a transaction: **Observe -> Ground -> Act -> Stabilize -> Verify**.
 - The result of an action will tell you if the UI state successfully transitioned (e.g., focus changed or elements shifted).
 - If the tool reports `VERIFICATION_FAILED` or `STALE_STATE`, the click may not have worked. You must re-analyze and retry.
 
@@ -29,7 +29,7 @@
 
 The tools output standard canonical schemas.
 
-`gui_analyze_screen` returns:
+`gui_observe` returns:
 ```json
 {
   "status": "success",
