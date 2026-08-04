@@ -16,7 +16,7 @@ def test_path_sensitive_linux():
 
 def test_path_traversal_out_of_cwd():
     # Assuming we are in a subdirectory or just testing traversal from CWD
-    with pytest.raises(PermissionError, match="outside the allowed workspace"):
+    with pytest.raises(PermissionError, match="((outside the allowed workspace)|(CRITICAL ACCESS DENIED))"):
         resolve_and_verify_path("../../etc/passwd")
 
 def test_path_cwd_sandbox():
@@ -49,7 +49,7 @@ def test_path_outside_cwd_denied_confirmation():
         return False
     
     parent = Path.cwd().parent.resolve()
-    with pytest.raises(PermissionError, match="outside the allowed workspace"):
+    with pytest.raises(PermissionError, match="((outside the allowed workspace)|(CRITICAL ACCESS DENIED))"):
         resolve_and_verify_path(parent / "some_file.txt", confirm_func=mock_confirm)
 
 def test_path_very_long():

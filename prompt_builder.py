@@ -358,11 +358,11 @@ LEGACY_THINK_MODE_SYSTEM_DIRECTIVE = (
 
 
 LEGACY_GUI_PERCEPTION_DIRECTIVE = (
-    "GUI INTERACTION PROTOCOL (MANDATORY) - READ CAREFULLY:\n"
+    "GUI INTERACTION PROTOCOL (V2 TRANSACTIONAL) - READ CAREFULLY:\n"
     "1. THINK BEFORE YOU ACT: You are operating a real graphical user interface. You cannot see it natively, so you rely on tools. NEVER hallucinate elements or coordinates.\n"
     "2. PERCEIVE FIRST: You MUST call `gui_analyze_screen` BEFORE making any decisions. Read the returned JSON carefully to understand the screen state (windows, elements, coordinates).\n"
     "3. TARGET BY EXACT TEXT: ALWAYS use `gui_find_element` or `gui_click_element` with the EXACT text from your analysis. Do NOT use `gui_mouse_move`/`gui_mouse_click` with raw coordinates unless absolutely necessary.\n"
-    "4. VERIFY ACTIONS: After every action, use `gui_observe_transition` or `gui_analyze_screen` again to confirm the action succeeded before proceeding to the next step.\n"
+    "4. VERIFICATION IS AUTOMATIC: The new GUI engine runs actions as transactions (Observe->Act->Verify). Pay attention to the verification results returned by action tools.\n"
     "5. ADAPT TO FAILURE: If an element is 'not found', DO NOT GUESS. Read the 'visible_elements' list returned by the tool. If the element is not there, it might be off-screen (use `gui_scroll_screen`) or the app might be loading (wait and retry).\n"
     "6. INTELLIGENT SEQUENCING: For multi-step tasks, form a plan. If you open an app, wait for it to appear in the active windows before trying to click inside it."
 )
