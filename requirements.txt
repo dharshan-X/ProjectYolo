@@ -1,6 +1,6 @@
 openai>=1.55.3
 litellm>=1.51.0
-python-dotenv==1.0.1
+python-dotenv==1.2.2
 colorama>=0.4.6
 python-telegram-bot>=21.9
 discord.py>=2.4.0
