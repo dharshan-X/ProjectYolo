@@ -526,6 +526,35 @@ def test_wayland_input_ydotool_drag_without_pyautogui(monkeypatch):
     assert ["ydotool", "click", "0x80"] in commands
 
 
+def test_wayland_input_ydotool_drag_fallback_to_pyautogui(monkeypatch):
+    import subprocess
+    from tools.gui.platform.wayland import WaylandBackend
+    backend = WaylandBackend()
+
+    monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/ydotool" if cmd == "ydotool" else None)
+
+    def mock_run_fail(*args, **kwargs):
+        raise subprocess.SubprocessError("ydotoold not running")
+
+    monkeypatch.setattr("subprocess.run", mock_run_fail)
+
+    dragged = []
+
+    class MockPyAutoGUI:
+        @staticmethod
+        def moveTo(x, y):
+            pass
+
+        @staticmethod
+        def dragTo(x, y, duration=0.5):
+            dragged.append((x, y, duration))
+
+    monkeypatch.setattr("tools.gui.platform.wayland.pyautogui", MockPyAutoGUI)
+
+    backend.emit_drag(10, 20, 100, 200, duration=0.4)
+    assert dragged == [(100, 200, 0.4)]
+
+
 def test_wayland_input_missing_all_raises(monkeypatch):
     from tools.gui.platform.wayland import WaylandBackend
     backend = WaylandBackend()
@@ -611,6 +640,36 @@ def test_wayland_active_windows_sway(monkeypatch):
     assert windows[1]["title"] == "FloatWin"
     assert windows[1]["id"] == "99"
     assert windows[1]["w"] == 500
+
+
+def test_wayland_active_windows_sway_with_none_nodes(monkeypatch):
+    import json
+    from tools.gui.platform.wayland import WaylandBackend
+
+    monkeypatch.setenv("XDG_CURRENT_DESKTOP", "sway")
+    monkeypatch.setattr("shutil.which", lambda cmd: "/usr/bin/swaymsg" if cmd == "swaymsg" else None)
+    backend = WaylandBackend()
+
+    tree_data = {
+        "name": "root",
+        "type": "root",
+        "nodes": [
+            {
+                "name": "Terminal",
+                "type": "con",
+                "id": 42,
+                "rect": {"x": 0, "y": 0, "width": 800, "height": 600},
+                "nodes": None,
+                "floating_nodes": None,
+            }
+        ],
+        "floating_nodes": None,
+    }
+    monkeypatch.setattr("subprocess.check_output", lambda args, **k: json.dumps(tree_data))
+
+    windows = backend.get_active_windows()
+    assert len(windows) == 1
+    assert windows[0]["title"] == "Terminal"
 
 
 def test_wayland_active_windows_atspi(monkeypatch):

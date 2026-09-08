@@ -58,7 +58,11 @@ class WaylandBackend(PlatformBackend):
     # -----------------------------------------------------------------------
     def take_screenshot(self, save_path: Optional[str] = None) -> Image.Image:
         """Capture screen using grim, gnome-screenshot, portal, or XWayland fallback."""
-        temp_dest = save_path or os.path.join(tempfile.gettempdir(), f"wayland_shot_{os.getpid()}_{id(self)}.png")
+        if save_path:
+            temp_dest = save_path
+        else:
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+                temp_dest = tmp.name
 
         # 1. Grim (wlroots / Hyprland / Sway)
         if shutil.which("grim"):
@@ -88,6 +92,11 @@ class WaylandBackend(PlatformBackend):
                 pass
 
         # 4. Fallback to XWayland capture via scrot or pyautogui
+        if not save_path:
+            try:
+                os.remove(temp_dest)
+            except Exception:
+                pass
         from tools.gui_ops import _take_screenshot_pil
         return _take_screenshot_pil(save_path)
 
@@ -195,20 +204,23 @@ class WaylandBackend(PlatformBackend):
             raise RuntimeError("Wayland scroll failed")
 
     def emit_drag(self, start_x: int, start_y: int, end_x: int, end_y: int, duration: float = 0.5) -> None:
+        if shutil.which("ydotool"):
+            try:
+                # Click down, move, click up
+                subprocess.run(["ydotool", "mousemove", "--absolute", str(start_x), str(start_y)], check=True, timeout=2)
+                subprocess.run(["ydotool", "click", "0x40"], check=True, timeout=2) # left button down
+                subprocess.run(["ydotool", "mousemove", "--absolute", str(end_x), str(end_y)], check=True, timeout=2)
+                subprocess.run(["ydotool", "click", "0x80"], check=True, timeout=2) # left button up
+                return
+            except Exception as e:
+                audit_log("wayland_emit_drag", {"error": str(e)}, "warning", "ydotool failed, trying fallback")
+
         if pyautogui is not None:
             pyautogui.moveTo(start_x, start_y)
             pyautogui.dragTo(end_x, end_y, duration=duration)
             return
 
-        if shutil.which("ydotool"):
-            # Click down, move, click up
-            subprocess.run(["ydotool", "mousemove", "--absolute", str(start_x), str(start_y)], check=True)
-            subprocess.run(["ydotool", "click", "0x40"], check=True) # left button down
-            subprocess.run(["ydotool", "mousemove", "--absolute", str(end_x), str(end_y)], check=True)
-            subprocess.run(["ydotool", "click", "0x80"], check=True) # left button up
-            return
-
-        raise RuntimeError("Wayland drag failed: neither pyautogui nor ydotool available")
+        raise RuntimeError("Wayland drag failed: neither ydotool nor pyautogui available")
 
     # -----------------------------------------------------------------------
     # Window Discovery
@@ -257,7 +269,7 @@ class WaylandBackend(PlatformBackend):
 
     def _extract_sway_windows(self, node: dict) -> List[Dict[str, Any]]:
         windows = []
-        if node.get("name") and node.get("type") in ("con", "floating_con") and node.get("nodes") == []:
+        if node.get("name") and node.get("type") in ("con", "floating_con") and (node.get("nodes") or []) == []:
             rect = node.get("rect", {})
             windows.append({
                 "id": str(node.get("id", "")),
@@ -267,9 +279,9 @@ class WaylandBackend(PlatformBackend):
                 "h": int(rect.get("height", 0)),
                 "title": str(node.get("name", "")),
             })
-        for child in node.get("nodes", []):
+        for child in node.get("nodes") or []:
             windows.extend(self._extract_sway_windows(child))
-        for child in node.get("floating_nodes", []):
+        for child in node.get("floating_nodes") or []:
             windows.extend(self._extract_sway_windows(child))
         return windows
 
