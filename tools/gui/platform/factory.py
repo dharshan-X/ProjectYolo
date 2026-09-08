@@ -34,19 +34,7 @@ def get_platform_backend() -> PlatformBackend:
 
         _CACHED_BACKEND = WaylandBackend()
     else:
-        try:
-            from tools.gui.platform.x11 import X11Backend
-        except ImportError:
-            class X11Backend(PlatformBackend):
-                """Placeholder until X11Backend is implemented."""
-                def get_display_layout(self): pass
-                def take_screenshot(self, save_path=None): pass
-                def get_active_windows(self): return []
-                def emit_click(self, x, y, button="left", clicks=1): pass
-                def emit_type(self, text, interval=0.0): pass
-                def emit_key(self, key): pass
-                def emit_scroll(self, clicks, x, y): pass
-                def emit_drag(self, start_x, start_y, end_x, end_y, duration=0.5): pass
+        from .x11 import X11Backend
 
         _CACHED_BACKEND = X11Backend()
 
