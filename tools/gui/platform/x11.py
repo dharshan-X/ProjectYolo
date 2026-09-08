@@ -87,12 +87,13 @@ class X11Backend(PlatformBackend):
         )
 
     def take_screenshot(self, save_path: Optional[str] = None) -> Image.Image:
-        from tools.gui_ops import _take_screenshot_pil
-        return _take_screenshot_pil(save_path)
+        from tools.gui_ops import _raw_x11_take_screenshot
+        return _raw_x11_take_screenshot(save_path)
 
     def get_active_windows(self) -> List[Dict[str, Any]]:
-        from tools.gui_ops import _get_active_windows
-        return _get_active_windows()
+        from tools.gui_ops import _raw_x11_get_active_windows
+        return _raw_x11_get_active_windows()
+
 
     def emit_click(self, x: int, y: int, button: str = "left", clicks: int = 1) -> None:
         if pyautogui is None:

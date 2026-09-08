@@ -122,43 +122,55 @@ def _check_ocr():
         ) from None
 
 
-def _is_blank_screenshot_image(path: str) -> bool:
-    """Return True when a saved image is effectively a blank/black placeholder."""
-    if not os.path.exists(path):
+def _is_blank_screenshot_pil(img: Any) -> bool:
+    """Return True when a PIL image is effectively a blank/black placeholder."""
+    try:
+        rgb = img.convert("RGB")
+        width, height = rgb.size
+        if width <= 0 or height <= 0:
+            return True
+
+        step_x = max(1, width // 32)
+        step_y = max(1, height // 32)
+        distinct_colors = set()
+        sample_count = 0
+
+        for y in range(0, height, step_y):
+            for x in range(0, width, step_x):
+                distinct_colors.add(rgb.getpixel((x, y)))
+                sample_count += 1
+                if len(distinct_colors) > 4:
+                    break
+            if len(distinct_colors) > 4:
+                break
+
+        if sample_count == 0:
+            return True
+
+        # A true blank fallback tends to be a single near-black pixel value.
+        if len(distinct_colors) == 1:
+            only_color = next(iter(distinct_colors))
+            return sum(only_color) <= 12
+
+        return False
+    except Exception:
+        return True
+
+
+def _is_blank_screenshot_image(path_or_img: Any) -> bool:
+    """Return True when a saved image file or PIL Image is effectively a blank/black placeholder."""
+    if Image is not None and isinstance(path_or_img, Image.Image):
+        return _is_blank_screenshot_pil(path_or_img)
+
+    if not isinstance(path_or_img, (str, Path)) or not os.path.exists(str(path_or_img)):
         return True
 
     try:
-        with Image.open(path) as img:
-            rgb = img.convert("RGB")
-            width, height = rgb.size
-            if width <= 0 or height <= 0:
-                return True
-
-            step_x = max(1, width // 32)
-            step_y = max(1, height // 32)
-            distinct_colors = set()
-            sample_count = 0
-
-            for y in range(0, height, step_y):
-                for x in range(0, width, step_x):
-                    distinct_colors.add(rgb.getpixel((x, y)))
-                    sample_count += 1
-                    if len(distinct_colors) > 4:
-                        break
-                if len(distinct_colors) > 4:
-                    break
-
-            if sample_count == 0:
-                return True
-
-            # A true blank fallback tends to be a single near-black pixel value.
-            if len(distinct_colors) == 1:
-                only_color = next(iter(distinct_colors))
-                return sum(only_color) <= 12
-
-            return False
+        with Image.open(str(path_or_img)) as img:
+            return _is_blank_screenshot_pil(img)
     except Exception:
         return True
+
 
 
 # ======================================================================
@@ -252,37 +264,24 @@ def gui_press_key(key: str) -> str:
 
 @register_tool()
 def gui_screenshot(save_path: str = "screenshot.png") -> str:
-    """Take a screenshot using scrot as a fallback if pyautogui fails on Linux."""
+    """Take a screenshot using the active platform backend."""
     try:
-        pyautogui.screenshot(save_path)
-        if _is_blank_screenshot_image(save_path):
-            raise RuntimeError(
-                "PyAutoGUI capture produced a blank image; display capture is unavailable in this environment."
-            )
+        from tools.gui.platform.factory import get_platform_backend
+
+        img = get_platform_backend().take_screenshot(save_path=save_path)
+        if not os.path.exists(save_path) and img is not None:
+            img.save(save_path)
         audit_log(
             "gui_screenshot",
-            {"path": save_path, "method": "pyautogui"},
+            {"path": save_path},
             "success",
             "Screenshot taken",
         )
         return f"Screenshot saved to {save_path}"
-    except Exception as pyautogui_err:
-        try:
-            subprocess.run(["scrot", save_path], check=True)
-            if _is_blank_screenshot_image(save_path):
-                raise RuntimeError(
-                    "scrot produced a blank screenshot; the Linux display session appears to be headless or not authorized for capture."
-                ) from pyautogui_err
-            audit_log(
-                "gui_screenshot",
-                {"path": save_path, "method": "scrot"},
-                "success",
-                "Screenshot taken",
-            )
-            return f"Screenshot saved to {save_path} (via scrot)"
-        except Exception as e:
-            audit_log("gui_screenshot", {"path": save_path}, "error", str(e))
-            return f"Error taking screenshot: {e}"
+    except Exception as e:
+        audit_log("gui_screenshot", {"path": save_path}, "error", str(e))
+        return f"Error taking screenshot: {e}"
+
 
 
 @register_tool()
@@ -320,8 +319,8 @@ def gui_get_screen_size() -> str:
 # ======================================================================
 
 
-def _take_screenshot_pil(save_path: Optional[str] = None) -> "Image.Image":
-    """Capture the screen and return a PIL Image."""
+def _raw_x11_take_screenshot(save_path: Optional[str] = None) -> "Image.Image":
+    """Direct X11/PyAutoGUI/scrot screen capture."""
     _check_pyautogui()
     if Image is None:
         raise ImportError("Pillow is not installed. `pip install pillow`")
@@ -331,6 +330,11 @@ def _take_screenshot_pil(save_path: Optional[str] = None) -> "Image.Image":
         if save_path:
             img.save(save_path)
             if _is_blank_screenshot_image(save_path):
+                raise RuntimeError(
+                    "PyAutoGUI capture produced a blank image; display capture is unavailable in this environment."
+                )
+        else:
+            if _is_blank_screenshot_image(img):
                 raise RuntimeError(
                     "PyAutoGUI capture produced a blank image; display capture is unavailable in this environment."
                 )
@@ -357,6 +361,14 @@ def _take_screenshot_pil(save_path: Optional[str] = None) -> "Image.Image":
                 raise RuntimeError(f"Screenshot failed. PyAutoGUI error: {e}. Scrot error: {scrot_err}") from scrot_err
         else:
             raise e
+
+
+def _take_screenshot_pil(save_path: Optional[str] = None) -> "Image.Image":
+    """Capture the screen via active platform backend."""
+    from tools.gui.platform.factory import get_platform_backend
+
+    return get_platform_backend().take_screenshot(save_path=save_path)
+
 
 
 def _ocr_image(
@@ -637,8 +649,8 @@ def _classify_element(text: str) -> str:
     return "text"
 
 
-def _get_active_windows() -> List[Dict[str, Any]]:
-    """Query the window manager for the list of visible windows."""
+def _raw_x11_get_active_windows() -> List[Dict[str, Any]]:
+    """Query the window manager for the list of visible windows directly via wmctrl/xdotool/win32."""
     windows = []
     if os.name == "nt":
         try:
@@ -713,6 +725,14 @@ def _get_active_windows() -> List[Dict[str, Any]]:
         except Exception:
             pass
     return windows
+
+
+def _get_active_windows() -> List[Dict[str, Any]]:
+    """Query the window manager for the list of visible windows via active platform backend."""
+    from tools.gui.platform.factory import get_platform_backend
+
+    return get_platform_backend().get_active_windows()
+
 
 
 def _draw_som_overlay(

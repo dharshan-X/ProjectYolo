@@ -97,8 +97,9 @@ class WaylandBackend(PlatformBackend):
                 os.remove(temp_dest)
             except Exception:
                 pass
-        from tools.gui_ops import _take_screenshot_pil
-        return _take_screenshot_pil(save_path)
+        from tools.gui_ops import _raw_x11_take_screenshot
+        return _raw_x11_take_screenshot(save_path)
+
 
     def _finalize_image(self, temp_dest: str, save_path: Optional[str]) -> Image.Image:
         img = Image.open(temp_dest)
@@ -264,8 +265,9 @@ class WaylandBackend(PlatformBackend):
             return atspi_windows
 
         # 4. Fallback to XWayland window list (wmctrl / xdotool)
-        from tools.gui_ops import _get_active_windows
-        return _get_active_windows()
+        from tools.gui_ops import _raw_x11_get_active_windows
+        return _raw_x11_get_active_windows()
+
 
     def _extract_sway_windows(self, node: dict) -> List[Dict[str, Any]]:
         windows = []

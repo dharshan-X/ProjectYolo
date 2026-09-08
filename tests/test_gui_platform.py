@@ -191,7 +191,7 @@ def test_x11_backend_screenshot(monkeypatch):
     from tools.gui.platform.x11 import X11Backend
     backend = X11Backend()
     fake_img = object()
-    monkeypatch.setattr("tools.gui_ops._take_screenshot_pil", lambda save_path=None: fake_img)
+    monkeypatch.setattr("tools.gui_ops._raw_x11_take_screenshot", lambda save_path=None: fake_img)
     img = backend.take_screenshot("dummy.png")
     assert img is fake_img
 
@@ -200,9 +200,10 @@ def test_x11_backend_windows(monkeypatch):
     from tools.gui.platform.x11 import X11Backend
     backend = X11Backend()
     fake_windows = [{"id": "0x123", "title": "Test Window", "x": 0, "y": 0, "w": 800, "h": 600}]
-    monkeypatch.setattr("tools.gui_ops._get_active_windows", lambda: fake_windows)
+    monkeypatch.setattr("tools.gui_ops._raw_x11_get_active_windows", lambda: fake_windows)
     windows = backend.get_active_windows()
     assert windows == fake_windows
+
 
 
 def test_x11_backend_input_missing_pyautogui(monkeypatch):
@@ -350,7 +351,7 @@ def test_wayland_screenshot_xwayland_fallback(monkeypatch):
     fake_img = Image.new("RGB", (50, 50), color="black")
 
     monkeypatch.setattr("shutil.which", lambda cmd: None)
-    monkeypatch.setattr("tools.gui_ops._take_screenshot_pil", lambda save_path=None: fake_img)
+    monkeypatch.setattr("tools.gui_ops._raw_x11_take_screenshot", lambda save_path=None: fake_img)
 
     img = backend.take_screenshot()
     assert img is fake_img
@@ -378,10 +379,11 @@ def test_wayland_screenshot_blank_image_cascades(monkeypatch, tmp_path):
 
     monkeypatch.setattr("subprocess.run", mock_run)
     monkeypatch.setattr("tools.gui.platform.wayland._is_blank_screenshot_image", lambda path: True)
-    monkeypatch.setattr("tools.gui_ops._take_screenshot_pil", lambda save_path=None: fallback_img)
+    monkeypatch.setattr("tools.gui_ops._raw_x11_take_screenshot", lambda save_path=None: fallback_img)
 
     img = backend.take_screenshot()
     assert img is fallback_img
+
 
 
 def test_wayland_screenshot_save_path(monkeypatch, tmp_path):
@@ -758,10 +760,11 @@ def test_wayland_active_windows_fallback(monkeypatch):
     monkeypatch.setattr("tools.gui.platform.wayland.Atspi", None)
 
     fake_windows = [{"id": "fallback_1", "title": "Fallback Win", "x": 0, "y": 0, "w": 640, "h": 480}]
-    monkeypatch.setattr("tools.gui_ops._get_active_windows", lambda: fake_windows)
+    monkeypatch.setattr("tools.gui_ops._raw_x11_get_active_windows", lambda: fake_windows)
 
     windows = backend.get_active_windows()
     assert windows == fake_windows
+
 
 
 def test_wayland_display_layout_hyprctl(monkeypatch):
@@ -911,6 +914,112 @@ def test_backend_delegation_errors(monkeypatch):
 
     with pytest.raises(RuntimeError, match="Backend emit_drag failed: drag error"):
         backend.emit_drag(0, 0, 1, 1)
+
+
+def test_gui_ops_delegation_to_platform_backend(monkeypatch):
+    import tools.gui_ops as gui_ops
+    from tools.gui.platform.factory import reset_platform_backend
+    from PIL import Image
+
+    reset_platform_backend()
+    calls = []
+    fake_img = Image.new("RGB", (100, 100), color="blue")
+    fake_windows = [{"id": "w1", "title": "Mock Win", "x": 10, "y": 10, "w": 500, "h": 400}]
+
+    class MockPlatformBackend:
+        def take_screenshot(self, save_path=None):
+            calls.append(("take_screenshot", save_path))
+            return fake_img
+
+        def get_active_windows(self):
+            calls.append(("get_active_windows",))
+            return fake_windows
+
+    mock_backend = MockPlatformBackend()
+    monkeypatch.setattr("tools.gui.platform.factory._CACHED_BACKEND", mock_backend)
+
+    # Verify _take_screenshot_pil delegates to active backend
+    img = gui_ops._take_screenshot_pil("test.png")
+    assert img is fake_img
+    assert calls[0] == ("take_screenshot", "test.png")
+
+    # Verify _get_active_windows delegates to active backend
+    wins = gui_ops._get_active_windows()
+    assert wins == fake_windows
+    assert calls[1] == ("get_active_windows",)
+
+    # Verify gui_screenshot delegates to active backend
+    res = gui_ops.gui_screenshot("test_out.png")
+    assert "Screenshot saved to test_out.png" in res
+    assert calls[2] == ("take_screenshot", "test_out.png")
+    if os.path.exists("test_out.png"):
+        os.remove("test_out.png")
+
+
+def test_engine_capture_state_delegates_to_platform_backend(monkeypatch):
+    from tools.gui import engine
+    from tools.gui.config import GUIConfig
+    from tools.gui.models import DisplayLayout
+    from tools.gui.platform.factory import reset_platform_backend
+    from PIL import Image
+
+    reset_platform_backend()
+    calls = []
+    fake_img = Image.new("RGB", (100, 100), color="blue")
+    fake_windows = [{"id": "w1", "title": "Mock Window", "x": 0, "y": 0, "w": 800, "h": 600}]
+
+    class MockPlatformBackend:
+        def get_display_layout(self):
+            calls.append("get_display_layout")
+            return DisplayLayout(monitors=[], virtual_width=1920, virtual_height=1080)
+
+        def take_screenshot(self, save_path=None):
+            calls.append("take_screenshot")
+            return fake_img
+
+        def get_active_windows(self):
+            calls.append("get_active_windows")
+            return fake_windows
+
+    mock_backend = MockPlatformBackend()
+    monkeypatch.setattr("tools.gui.platform.factory._CACHED_BACKEND", mock_backend)
+    monkeypatch.setattr("tools.gui.engine.get_atspi_elements", lambda: [])
+    monkeypatch.setattr("tools.gui.engine.get_ocr_elements", lambda img: [])
+
+    state = engine.capture_state(GUIConfig.load())
+
+    assert "get_display_layout" in calls
+    assert "take_screenshot" in calls
+    assert "get_active_windows" in calls
+    assert len(state.windows) == 1
+    assert state.windows[0].title == "Mock Window"
+
+
+
+def test_blank_screenshot_detection_in_memory():
+    from PIL import Image
+    from tools.gui_ops import _is_blank_screenshot_image
+
+    # Pure black image in memory
+    blank_img = Image.new("RGB", (100, 100), color=(0, 0, 0))
+    assert _is_blank_screenshot_image(blank_img) is True
+
+    # Image with content
+    non_blank_img = Image.new("RGB", (100, 100), color=(128, 200, 50))
+    assert _is_blank_screenshot_image(non_blank_img) is False
+
+
+def test_raw_x11_take_screenshot_blank_in_memory(monkeypatch):
+    from PIL import Image
+    import tools.gui_ops as gui_ops
+
+    blank_img = Image.new("RGB", (50, 50), color=(0, 0, 0))
+    monkeypatch.setattr("tools.gui_ops.pyautogui", type("MockPAG", (), {"screenshot": staticmethod(lambda: blank_img)}))
+    monkeypatch.setattr("subprocess.run", lambda *a, **k: (_ for _ in ()).throw(FileNotFoundError("no scrot")))
+
+    with pytest.raises(RuntimeError, match="blank"):
+        gui_ops._raw_x11_take_screenshot(save_path=None)
+
 
 
 
