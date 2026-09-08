@@ -836,3 +836,81 @@ def test_wayland_display_layout_fallback(monkeypatch):
     assert layout.monitors[0].name == "default-screen"
     assert layout.monitors[0].is_primary is True
 
+
+def test_backend_delegation_to_platform(monkeypatch):
+    import tools.gui.backend as backend
+    from tools.gui.platform.factory import reset_platform_backend
+
+    reset_platform_backend()
+    calls = []
+
+    class MockBackend:
+        def get_display_layout(self):
+            calls.append("layout")
+            return DisplayLayout(monitors=[], virtual_width=1000, virtual_height=800)
+
+        def emit_click(self, *a, **k):
+            calls.append("click")
+
+        def emit_type(self, *a, **k):
+            calls.append("type")
+
+        def emit_key(self, *a, **k):
+            calls.append("key")
+
+        def emit_scroll(self, *a, **k):
+            calls.append("scroll")
+
+        def emit_drag(self, *a, **k):
+            calls.append("drag")
+
+    monkeypatch.setattr("tools.gui.backend.get_platform_backend", lambda: MockBackend())
+
+    assert backend.get_display_layout().virtual_width == 1000
+    backend.emit_click(1, 2)
+    backend.emit_type("abc")
+    backend.emit_key("enter")
+    backend.emit_scroll(1, 0, 0)
+    backend.emit_drag(0, 0, 1, 1)
+
+    assert calls == ["layout", "click", "type", "key", "scroll", "drag"]
+
+
+def test_backend_delegation_errors(monkeypatch):
+    import tools.gui.backend as backend
+
+    class FailingBackend:
+        def emit_click(self, *a, **k):
+            raise ValueError("click error")
+
+        def emit_type(self, *a, **k):
+            raise ValueError("type error")
+
+        def emit_key(self, *a, **k):
+            raise ValueError("key error")
+
+        def emit_scroll(self, *a, **k):
+            raise ValueError("scroll error")
+
+        def emit_drag(self, *a, **k):
+            raise ValueError("drag error")
+
+    monkeypatch.setattr("tools.gui.backend.get_platform_backend", lambda: FailingBackend())
+
+    with pytest.raises(RuntimeError, match="Backend emit_click failed: click error"):
+        backend.emit_click(0, 0)
+
+    with pytest.raises(RuntimeError, match="Backend emit_type failed: type error"):
+        backend.emit_type("test")
+
+    with pytest.raises(RuntimeError, match="Backend emit_key failed: key error"):
+        backend.emit_key("Return")
+
+    with pytest.raises(RuntimeError, match="Backend emit_scroll failed: scroll error"):
+        backend.emit_scroll(1, 0, 0)
+
+    with pytest.raises(RuntimeError, match="Backend emit_drag failed: drag error"):
+        backend.emit_drag(0, 0, 1, 1)
+
+
+
