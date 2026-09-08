@@ -147,7 +147,7 @@ class TestAgentPromptArchitecture(unittest.TestCase):
                     return _gen()
 
             async def _fake_chat_completions(
-                *, messages, tools, tool_choice="auto", stream=False
+                *, messages, tools, tool_choice="auto", stream=False, **kwargs
             ):
                 captured["messages"] = messages
                 return _FakeStream()

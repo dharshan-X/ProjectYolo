@@ -6,6 +6,11 @@ from llm_router import LLMConfig, LLMRouter, load_llm_config
 
 _ROUTER_ENV_VARS = (
     "ANTHROPIC_API_KEY",
+    "GEMINI_API_KEY",
+    "GEMINI_BASE_URL",
+    "GEMINI_MODEL",
+    "GOOGLE_API_KEY",
+    "GOOGLE_MODEL",
     "LLM_API_KEY",
     "LLM_BASE_URL",
     "LLM_MODEL",
@@ -193,3 +198,22 @@ async def test_network_errors_remain_retryable():
 
     assert result == "success"
     assert call.await_count == 2
+
+
+def test_gemini_config_and_auto_detection(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "gemini-test-key")
+    config = load_llm_config()
+    assert config.provider == "gemini"
+    assert config.api_key == "gemini-test-key"
+    assert config.model.startswith("gemini/")
+
+
+def test_gemini_explicit_provider(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "gemini")
+    monkeypatch.setenv("GEMINI_API_KEY", "gemini-test-key")
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-2.0-flash")
+    config = load_llm_config()
+    assert config.provider == "gemini"
+    assert config.model == "gemini/gemini-2.0-flash"
+    assert config.api_key == "gemini-test-key"
+

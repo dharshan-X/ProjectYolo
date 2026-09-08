@@ -8,7 +8,7 @@ const { spawn } = require('child_process');
 
 // Configure Chromium Ozone platform for native Wayland support on Linux
 if (process.platform === 'linux') {
-  const isWayland = Boolean(process.env.WAYLAND_DISPLAY || process.env.XDG_SESSION_TYPE === 'wayland');
+  const isWayland = Boolean(process.env.WAYLAND_DISPLAY || (process.env.XDG_SESSION_TYPE || '').toLowerCase() === 'wayland');
   const ozoneHint = process.env.YOLO_ELECTRON_OZONE || (isWayland ? 'auto' : 'x11');
 
   if (ozoneHint !== 'x11') {

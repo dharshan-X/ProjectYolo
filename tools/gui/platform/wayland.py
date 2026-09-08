@@ -102,25 +102,28 @@ class WaylandBackend(PlatformBackend):
 
 
     def _finalize_image(self, temp_dest: str, save_path: Optional[str]) -> Image.Image:
-        img = Image.open(temp_dest)
-        img.load()
-        if not save_path:
-            try:
-                os.remove(temp_dest)
-            except Exception:
-                pass
-        return img
+        try:
+            img = Image.open(temp_dest)
+            img.load()
+            return img
+        finally:
+            if not save_path:
+                try:
+                    os.remove(temp_dest)
+                except Exception:
+                    pass
 
     # -----------------------------------------------------------------------
     # Input Simulation Cascade
     # -----------------------------------------------------------------------
-    def emit_click(self, x: int, y: int, button: str = "left", clicks: int = 1) -> None:
+    def emit_click(self, x: Optional[int] = None, y: Optional[int] = None, button: str = "left", clicks: int = 1) -> None:
         btn_map = {"left": "0xC0", "right": "0xC1", "middle": "0xC2"}
         btn_code = btn_map.get(button.lower(), "0xC0")
 
         if shutil.which("ydotool"):
             try:
-                subprocess.run(["ydotool", "mousemove", "--absolute", str(x), str(y)], check=True, timeout=2)
+                if x is not None and y is not None:
+                    subprocess.run(["ydotool", "mousemove", "--absolute", str(x), str(y)], check=True, timeout=2)
                 for _ in range(clicks):
                     subprocess.run(["ydotool", "click", btn_code], check=True, timeout=2)
                 return
@@ -129,14 +132,31 @@ class WaylandBackend(PlatformBackend):
 
         # Fallback to PyAutoGUI
         if pyautogui is not None:
-            pyautogui.click(x=x, y=y, button=button, clicks=clicks)
+            if x is not None and y is not None:
+                pyautogui.click(x=x, y=y, button=button, clicks=clicks)
+            else:
+                pyautogui.click(button=button, clicks=clicks)
         else:
             raise RuntimeError("Wayland click failed: neither ydotool nor pyautogui available")
+
+    def emit_move(self, x: int, y: int, duration: float = 0.0) -> None:
+        if shutil.which("ydotool"):
+            try:
+                subprocess.run(["ydotool", "mousemove", "--absolute", str(x), str(y)], check=True, timeout=2)
+                return
+            except Exception as e:
+                audit_log("wayland_emit_move", {"error": str(e)}, "warning", "ydotool failed, trying fallback")
+
+        if pyautogui is not None:
+            pyautogui.moveTo(x, y, duration=duration)
+            return
+
+        raise RuntimeError("Wayland move failed: neither ydotool nor pyautogui available")
 
     def emit_type(self, text: str, interval: float = 0.0) -> None:
         if shutil.which("wtype"):
             try:
-                subprocess.run(["wtype", text], check=True, timeout=3)
+                subprocess.run(["wtype", "--", text], check=True, timeout=3)
                 return
             except Exception:
                 pass
@@ -303,9 +323,9 @@ class WaylandBackend(PlatformBackend):
                     win_node = app_node.get_child_at_index(j)
                     if not win_node:
                         continue
-                    role = win_node.get_role()
-                    if role in (Atspi.Role.FRAME, Atspi.Role.WINDOW, Atspi.Role.DIALOG):
-                        try:
+                    try:
+                        role = win_node.get_role()
+                        if role in (Atspi.Role.FRAME, Atspi.Role.WINDOW, Atspi.Role.DIALOG):
                             ext = win_node.get_extents(Atspi.CoordType.SCREEN)
                             if ext.width > 10 and ext.height > 10:
                                 windows.append({
@@ -316,8 +336,8 @@ class WaylandBackend(PlatformBackend):
                                     "h": ext.height,
                                     "title": win_node.get_name() or "",
                                 })
-                        except Exception:
-                            continue
+                    except Exception:
+                        continue
             return windows
         except Exception:
             return []
@@ -375,6 +395,14 @@ class WaylandBackend(PlatformBackend):
         try:
             import glob
             for mode_file in glob.glob("/sys/class/drm/card*-*/modes"):
+                status_file = os.path.join(os.path.dirname(mode_file), "status")
+                if os.path.exists(status_file):
+                    try:
+                        with open(status_file, "r") as sf:
+                            if sf.read().strip().lower() != "connected":
+                                continue
+                    except Exception:
+                        continue
                 with open(mode_file, "r") as f:
                     line = f.readline().strip()
                     if "x" in line:

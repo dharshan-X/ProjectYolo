@@ -16,6 +16,7 @@ def test_electron_main_js_ozone_switches():
     assert "WAYLAND_DISPLAY" in main_js
     assert "XDG_SESSION_TYPE" in main_js
     assert "app.commandLine.appendSwitch" in main_js
+    assert "(process.env.XDG_SESSION_TYPE || '').toLowerCase() === 'wayland'" in main_js
 
 
 def test_electron_main_js_syntax():

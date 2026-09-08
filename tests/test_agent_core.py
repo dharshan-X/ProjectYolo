@@ -175,3 +175,31 @@ def test_session_save_behavior(mock_session):
         # If signature differs, it will save.
         sm.save(1)
         assert mock_save.call_count == 1
+
+
+@pytest.mark.anyio
+async def test_max_agent_iterations_unlimited_by_default(monkeypatch, mock_session):
+    import agent
+
+    monkeypatch.delenv("AGENT_MAX_ITERATIONS", raising=False)
+    # Mock _stream_llm_round to return content immediately so it terminates turn
+    with patch("agent._stream_llm_round", new_callable=AsyncMock) as mock_stream, \
+         patch("agent.mcp_manager.initialize", new_callable=AsyncMock):
+        mock_stream.return_value = ({"content": "Finished", "usage": {}}, None)
+        result = await agent.run_agent_turn("hello", mock_session)
+        assert result == "Finished"
+
+
+@pytest.mark.anyio
+async def test_max_agent_iterations_explicit_cap_respected(monkeypatch, mock_session):
+    import agent
+
+    monkeypatch.setenv("AGENT_MAX_ITERATIONS", "2")
+    # Simulate repeated tool calls that never return pure content
+    with patch("agent._stream_llm_round", new_callable=AsyncMock) as mock_stream, \
+         patch("agent._append_assistant_round", return_value=True), \
+         patch("agent.mcp_manager.initialize", new_callable=AsyncMock):
+        mock_stream.return_value = ({"content": "", "usage": {}, "tool_calls": [{"id": "1"}]}, None)
+        result = await agent.run_agent_turn("hello", mock_session)
+        assert "maximum number of processing steps" in result
+

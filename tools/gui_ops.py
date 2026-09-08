@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from tools.registry import register_tool
-from tools.base import YOLO_ARTIFACTS, audit_log
+from tools.base import YOLO_ARTIFACTS, audit_log, resolve_and_verify_path
 
 """
 GUI Perception & Interaction Engine — UI-TARS-inspired.
@@ -181,9 +181,19 @@ def _is_blank_screenshot_image(path_or_img: Any) -> bool:
 @register_tool()
 def gui_mouse_move(x: int, y: int, duration: float = 0.0) -> str:
     """Move the mouse cursor to a specific (x, y) coordinate."""
-    _check_pyautogui()
     try:
-        pyautogui.moveTo(x, y, duration=duration)
+        from tools.gui.platform.factory import get_platform_backend
+
+        backend = get_platform_backend()
+        if hasattr(backend, "emit_move"):
+            backend.emit_move(x, y, duration=duration)
+        elif hasattr(backend, "emit_click"):
+            backend.emit_click(x, y, clicks=0)
+        elif pyautogui is not None:
+            pyautogui.moveTo(x, y, duration=duration)
+        else:
+            raise RuntimeError("No suitable backend available to move mouse")
+
         audit_log("gui_mouse_move", {"x": x, "y": y}, "success", "Mouse moved")
         return f"Moved mouse to ({x}, {y})"
     except Exception as e:
@@ -199,13 +209,15 @@ def gui_mouse_click(
     y: Optional[int] = None,
 ) -> str:
     """Click the mouse at the current position, or at the specified (x, y) coordinates if provided."""
-    _check_pyautogui()
     try:
+        from tools.gui.platform.factory import get_platform_backend
+
         target_x = int(x) if x is not None else None
         target_y = int(y) if y is not None else None
 
+        backend = get_platform_backend()
         if target_x is not None and target_y is not None:
-            pyautogui.click(x=target_x, y=target_y, button=button, clicks=clicks)
+            backend.emit_click(x=target_x, y=target_y, button=button, clicks=clicks)
             audit_log(
                 "gui_mouse_click",
                 {"button": button, "clicks": clicks, "x": target_x, "y": target_y},
@@ -214,7 +226,7 @@ def gui_mouse_click(
             )
             return f"Clicked {button} button {clicks} time(s) at ({target_x}, {target_y})"
         else:
-            pyautogui.click(button=button, clicks=clicks)
+            backend.emit_click(x=None, y=None, button=button, clicks=clicks)
             audit_log(
                 "gui_mouse_click",
                 {"button": button, "clicks": clicks},
@@ -235,9 +247,10 @@ def gui_mouse_click(
 @register_tool()
 def gui_type_text(text: str, interval: float = 0.0) -> str:
     """Type a string of characters."""
-    _check_pyautogui()
     try:
-        pyautogui.write(text, interval=interval)
+        from tools.gui.platform.factory import get_platform_backend
+
+        get_platform_backend().emit_type(text, interval=interval)
         audit_log("gui_type_text", {"text_len": len(text)}, "success", "Text typed")
         return f"Typed text of length {len(text)}"
     except Exception as e:
@@ -248,13 +261,10 @@ def gui_type_text(text: str, interval: float = 0.0) -> str:
 @register_tool()
 def gui_press_key(key: str) -> str:
     """Press a single key or a combination (e.g., 'enter', 'ctrl+c')."""
-    _check_pyautogui()
     try:
-        if "+" in key:
-            keys = key.split("+")
-            pyautogui.hotkey(*keys)
-        else:
-            pyautogui.press(key)
+        from tools.gui.platform.factory import get_platform_backend
+
+        get_platform_backend().emit_key(key)
         audit_log("gui_press_key", {"key": key}, "success", "Key pressed")
         return f"Pressed key(s): {key}"
     except Exception as e:
@@ -262,22 +272,61 @@ def gui_press_key(key: str) -> str:
         return f"Error: {e}"
 
 
+def gui_mouse_scroll(clicks: int, x: Optional[int] = None, y: Optional[int] = None) -> str:
+    """Scroll the mouse wheel. Positive clicks scroll up, negative scroll down."""
+    try:
+        from tools.gui.platform.factory import get_platform_backend
+
+        target_x = int(x) if x is not None else 0
+        target_y = int(y) if y is not None else 0
+        get_platform_backend().emit_scroll(clicks=clicks, x=target_x, y=target_y)
+        audit_log("gui_mouse_scroll", {"clicks": clicks, "x": target_x, "y": target_y}, "success", "Mouse scrolled")
+        return f"Scrolled mouse {clicks} click(s) at ({target_x}, {target_y})"
+    except Exception as e:
+        audit_log("gui_mouse_scroll", {"clicks": clicks, "x": x, "y": y}, "error", str(e))
+        return f"Error: {e}"
+
+
+def gui_mouse_drag(start_x: int, start_y: int, end_x: int, end_y: int, duration: float = 0.5) -> str:
+    """Drag mouse cursor from (start_x, start_y) to (end_x, end_y)."""
+    try:
+        from tools.gui.platform.factory import get_platform_backend
+
+        get_platform_backend().emit_drag(start_x=start_x, start_y=start_y, end_x=end_x, end_y=end_y, duration=duration)
+        audit_log(
+            "gui_mouse_drag",
+            {"start_x": start_x, "start_y": start_y, "end_x": end_x, "end_y": end_y, "duration": duration},
+            "success",
+            "Mouse dragged",
+        )
+        return f"Dragged mouse from ({start_x}, {start_y}) to ({end_x}, {end_y})"
+    except Exception as e:
+        audit_log(
+            "gui_mouse_drag",
+            {"start_x": start_x, "start_y": start_y, "end_x": end_x, "end_y": end_y},
+            "error",
+            str(e),
+        )
+        return f"Error: {e}"
+
+
 @register_tool()
-def gui_screenshot(save_path: str = "screenshot.png") -> str:
+def gui_screenshot(save_path: str = "screenshot.png", confirm_func: Optional[Any] = None) -> str:
     """Take a screenshot using the active platform backend."""
     try:
         from tools.gui.platform.factory import get_platform_backend
 
-        img = get_platform_backend().take_screenshot(save_path=save_path)
-        if not os.path.exists(save_path) and img is not None:
-            img.save(save_path)
+        target = str(resolve_and_verify_path(save_path, confirm_func=confirm_func))
+        img = get_platform_backend().take_screenshot(save_path=target)
+        if not os.path.exists(target) and img is not None:
+            img.save(target)
         audit_log(
             "gui_screenshot",
-            {"path": save_path},
+            {"path": target},
             "success",
             "Screenshot taken",
         )
-        return f"Screenshot saved to {save_path}"
+        return f"Screenshot saved to {target}"
     except Exception as e:
         audit_log("gui_screenshot", {"path": save_path}, "error", str(e))
         return f"Error taking screenshot: {e}"
@@ -1215,7 +1264,12 @@ def gui_scroll_screen(
 
     try:
         scroll_val = -amount if direction == "down" else amount
-        pyautogui.scroll(scroll_val)
+        try:
+            from tools.gui.platform.factory import get_platform_backend
+            get_platform_backend().emit_scroll(scroll_val, 0, 0)
+        except Exception:
+            if pyautogui is not None:
+                pyautogui.scroll(scroll_val)
         time.sleep(0.5)  # Wait for scroll animation
 
         # Capture and analyze post-scroll state

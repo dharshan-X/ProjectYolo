@@ -140,3 +140,69 @@ def test_process_carriage_returns_keeps_last_segment():
     assert _process_carriage_returns("done\r") == "done"
     # no CR is passed through untouched
     assert _process_carriage_returns("plain line") == "plain line"
+
+
+# --- TieredMemory: 0.0 importance preservation and scoped deletion ---
+
+def test_tiered_memory_zero_importance_and_scoped_delete(tmp_path):
+    from tools.yolo_memory import TieredMemoryEngine
+    db = tmp_path / "test_mem.db"
+    engine = TieredMemoryEngine(db_path=db)
+
+    # Insert memory with 0.0 importance
+    with engine._get_connection() as conn:
+        conn.execute(
+            "INSERT INTO L3_semantic_memory (user_id, fact, importance) VALUES (?, ?, ?)",
+            (10, "trivial fact", 0.0),
+        )
+        conn.execute(
+            "INSERT INTO L3_semantic_memory (user_id, fact, importance) VALUES (?, ?, ?)",
+            (20, "other user fact", 5.0),
+        )
+        conn.commit()
+
+    results = engine.search("trivial", filters={"user_id": 10})
+    assert len(results) == 1
+    mem_id = results[0]["id"]
+
+    # Attempt to delete user 10's memory with user_id=20 (should NOT delete)
+    engine.delete(mem_id, user_id=20)
+    assert len(engine.search("trivial", filters={"user_id": 10})) == 1
+
+    # Now delete with correct user_id=10
+    engine.delete(mem_id, user_id=10)
+    assert len(engine.search("trivial", filters={"user_id": 10})) == 0
+
+
+# --- file_ops: markdown handling and truncation on large content ---
+
+def test_read_file_markdown_and_truncation(tmp_path):
+    from tools.file_ops import read_file
+    large_md = tmp_path / "sample.md"
+    large_md.write_text("# Heading\n" + ("x" * 200), encoding="utf-8")
+
+    content = read_file(str(large_md), confirm_func=lambda *a, **k: "APPROVED")
+    assert "# Heading" in content
+    assert "xxxx" in content
+
+
+# --- tool_dispatcher: Non-retryable errors break immediately ---
+
+@pytest.mark.asyncio
+async def test_dispatcher_non_retryable_error_no_retries():
+    from tool_dispatcher import execute_tool_direct
+    from unittest.mock import patch
+
+    # If it was retrying, audit_log for tool_retry would be called
+    with patch("tools.base.audit_log") as mock_audit:
+        res = await execute_tool_direct(
+            "read_file",
+            {"path": "nonexistent_file_test.txt"},
+            user_id=1,
+            confirmed=True,
+        )
+        # Should not log any tool_retry
+        retry_calls = [c for c in mock_audit.call_args_list if c[0][0] == "tool_retry"]
+        assert len(retry_calls) == 0
+        assert "not a file" in res.lower() or "error" in res.lower()
+

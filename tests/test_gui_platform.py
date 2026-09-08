@@ -357,6 +357,19 @@ def test_wayland_screenshot_xwayland_fallback(monkeypatch):
     assert img is fake_img
 
 
+def test_wayland_finalize_image_cleanup_on_error(tmp_path):
+    from tools.gui.platform.wayland import WaylandBackend
+
+    backend = WaylandBackend()
+    fake_tmp = tmp_path / "corrupt.png"
+    fake_tmp.write_bytes(b"not a valid image content")
+
+    with pytest.raises(Exception):
+        backend._finalize_image(str(fake_tmp), save_path=None)
+
+    assert not fake_tmp.exists(), "Temporary file should have been removed by finally block"
+
+
 def test_wayland_screenshot_blank_image_cascades(monkeypatch, tmp_path):
     from tools.gui.platform.wayland import WaylandBackend
     from PIL import Image
@@ -448,8 +461,10 @@ def test_wayland_input_wtype(monkeypatch):
     backend.emit_type("test typing")
     backend.emit_key("Return")
     backend.emit_key("Ctrl+Shift+T")
+    backend.emit_type("-k")
 
-    assert ["wtype", "test typing"] in commands
+    assert ["wtype", "--", "test typing"] in commands
+    assert ["wtype", "--", "-k"] in commands
     assert ["wtype", "-k", "return"] in commands
     assert ["wtype", "-M", "ctrl", "-M", "shift", "-k", "t", "-m", "shift", "-m", "ctrl"] in commands
 
@@ -752,6 +767,68 @@ def test_wayland_active_windows_atspi(monkeypatch):
     assert windows[0]["id"] == "0_0"
 
 
+def test_wayland_active_windows_atspi_exception_contained(monkeypatch):
+    from types import SimpleNamespace
+    from tools.gui.platform.wayland import WaylandBackend
+
+    backend = WaylandBackend()
+    backend.compositor = "gnome"
+    monkeypatch.setattr("shutil.which", lambda cmd: None)
+
+    class MockRole:
+        FRAME = 1
+        WINDOW = 2
+        DIALOG = 3
+
+    class MockExtents:
+        def __init__(self, x, y, width, height):
+            self.x = x
+            self.y = y
+            self.width = width
+            self.height = height
+
+    class MockFailingNode:
+        def get_role(self):
+            raise RuntimeError("D-Bus IPC error on dead window")
+
+    class MockGoodNode:
+        def get_role(self):
+            return MockRole.FRAME
+
+        def get_name(self):
+            return "Good Window"
+
+        def get_extents(self, coord_type):
+            return MockExtents(100, 200, 800, 600)
+
+    class MockAppNode:
+        def __init__(self, children):
+            self._children = children
+
+        def get_child_count(self):
+            return len(self._children)
+
+        def get_child_at_index(self, idx):
+            return self._children[idx]
+
+    desktop = SimpleNamespace(
+        get_child_count=lambda: 1,
+        get_child_at_index=lambda idx: MockAppNode([MockFailingNode(), MockGoodNode()]),
+    )
+
+    mock_atspi = SimpleNamespace(
+        get_desktop=lambda idx: desktop,
+        Role=MockRole,
+        CoordType=SimpleNamespace(SCREEN=0),
+    )
+    monkeypatch.setattr("tools.gui.platform.wayland.Atspi", mock_atspi)
+
+    windows = backend.get_active_windows()
+    assert len(windows) == 1
+    assert windows[0]["title"] == "Good Window"
+    assert windows[0]["w"] == 800
+
+
 def test_wayland_active_windows_fallback(monkeypatch):
     from tools.gui.platform.wayland import WaylandBackend
     backend = WaylandBackend()
@@ -814,6 +891,8 @@ def test_wayland_display_layout_drm(monkeypatch, tmp_path):
 
     fake_drm_mode = tmp_path / "modes"
     fake_drm_mode.write_text("1920x1200\n1680x1050\n")
+    fake_status = tmp_path / "status"
+    fake_status.write_text("connected\n")
 
     monkeypatch.setattr("glob.glob", lambda pattern: [str(fake_drm_mode)])
 
@@ -822,6 +901,23 @@ def test_wayland_display_layout_drm(monkeypatch, tmp_path):
     assert layout.virtual_height == 1200
     assert layout.monitors[0].name == "drm-monitor"
     assert layout.monitors[0].is_primary is True
+
+
+def test_wayland_display_layout_drm_disconnected(monkeypatch, tmp_path):
+    from tools.gui.platform.wayland import WaylandBackend
+    backend = WaylandBackend()
+
+    monkeypatch.setattr("shutil.which", lambda cmd: None)
+
+    fake_drm_mode = tmp_path / "modes"
+    fake_drm_mode.write_text("1920x1200\n1680x1050\n")
+    fake_status = tmp_path / "status"
+    fake_status.write_text("disconnected\n")
+
+    monkeypatch.setattr("glob.glob", lambda pattern: [str(fake_drm_mode)])
+
+    layout = backend.get_display_layout()
+    assert layout.monitors[0].name == "default-screen"
 
 
 def test_wayland_display_layout_fallback(monkeypatch):
@@ -935,6 +1031,24 @@ def test_gui_ops_delegation_to_platform_backend(monkeypatch):
             calls.append(("get_active_windows",))
             return fake_windows
 
+        def emit_click(self, x=None, y=None, button="left", clicks=1):
+            calls.append(("emit_click", x, y, button, clicks))
+
+        def emit_type(self, text, interval=0.0):
+            calls.append(("emit_type", text, interval))
+
+        def emit_key(self, key):
+            calls.append(("emit_key", key))
+
+        def emit_move(self, x, y, duration=0.0):
+            calls.append(("emit_move", x, y, duration))
+
+        def emit_scroll(self, clicks, x=0, y=0):
+            calls.append(("emit_scroll", clicks, x, y))
+
+        def emit_drag(self, start_x, start_y, end_x, end_y, duration=0.5):
+            calls.append(("emit_drag", start_x, start_y, end_x, end_y, duration))
+
     mock_backend = MockPlatformBackend()
     monkeypatch.setattr("tools.gui.platform.factory._CACHED_BACKEND", mock_backend)
 
@@ -950,10 +1064,42 @@ def test_gui_ops_delegation_to_platform_backend(monkeypatch):
 
     # Verify gui_screenshot delegates to active backend
     res = gui_ops.gui_screenshot("test_out.png")
-    assert "Screenshot saved to test_out.png" in res
-    assert calls[2] == ("take_screenshot", "test_out.png")
-    if os.path.exists("test_out.png"):
-        os.remove("test_out.png")
+    assert "Screenshot saved to" in res
+    assert "test_out.png" in res
+    verified_test_out = str(gui_ops.resolve_and_verify_path("test_out.png"))
+    assert calls[2] == ("take_screenshot", verified_test_out)
+    if os.path.exists(verified_test_out):
+        os.remove(verified_test_out)
+
+    # Verify legacy input primitives delegate to active backend
+    gui_ops.gui_mouse_click("left", 1, 100, 200)
+    assert ("emit_click", 100, 200, "left", 1) in calls
+
+    gui_ops.gui_mouse_click("right", 2)
+    assert ("emit_click", None, None, "right", 2) in calls
+
+    gui_ops.gui_type_text("hello world")
+    assert ("emit_type", "hello world", 0.0) in calls
+
+    gui_ops.gui_press_key("ctrl+c")
+    assert ("emit_key", "ctrl+c") in calls
+
+    gui_ops.gui_mouse_move(300, 400)
+    assert ("emit_move", 300, 400, 0.0) in calls
+
+    gui_ops.gui_mouse_scroll(5, 10, 20)
+    assert ("emit_scroll", 5, 10, 20) in calls
+
+    gui_ops.gui_mouse_drag(10, 20, 30, 40, duration=0.2)
+    assert ("emit_drag", 10, 20, 30, 40, 0.2) in calls
+
+
+def test_gui_screenshot_path_safety():
+    import tools.gui_ops as gui_ops
+
+    res = gui_ops.gui_screenshot("/etc/shadow")
+    assert "Error taking screenshot" in res
+    assert "CRITICAL ACCESS DENIED" in res or "blocked" in res.lower() or "outside" in res.lower()
 
 
 def test_engine_capture_state_delegates_to_platform_backend(monkeypatch):

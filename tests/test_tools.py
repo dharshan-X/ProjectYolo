@@ -27,10 +27,24 @@ def test_gui_tools_and_schema_alignment():
     assert tools._GUI_AVAILABLE is True
     assert tools.gui_mouse_move is not None
     assert tools.gui_screenshot is not None
-    
+    # V2 transactional tools are exposed to the model
+    assert tools.gui_observe is not None
+    assert tools.gui_find is not None
+    assert tools.gui_action is not None
+
+    schema_names = {s["function"]["name"] for s in tools.TOOLS_SCHEMAS}
+    # V2 tools present in schemas
+    assert {"gui_observe", "gui_find", "gui_action"} <= schema_names
+    # Retired V1 perception tools are no longer exposed to the model
+    retired = {
+        "gui_analyze_screen", "gui_find_element", "gui_click_element",
+        "gui_observe_transition", "gui_scroll_screen", "gui_read_text_at",
+    }
+    assert not (retired & schema_names)
+
     alignment = tools.validate_tool_schema_alignment()
     assert alignment["schemas_without_handlers"] == []
-    
+
     # Filter out chaos test tools registered globally during test runs
     handlers = [h for h in alignment["handlers_without_schemas"] if not h.startswith("chaos_")]
     assert handlers == []
@@ -57,6 +71,29 @@ def test_adjust_rate_limiting(monkeypatch):
     # Get the limiter again, it should have updated dynamically
     limiter = _get_rate_limiter()
     assert limiter.rpm_limit == 50
+
+
+def test_gui_screenshot_rejects_blank_fallback(tmp_path, monkeypatch):
+    from PIL import Image
+    from tools.gui_ops import gui_screenshot
+
+    target = tmp_path / "blank_screenshot.png"
+    Image.new("RGB", (10, 10), color=(0, 0, 0)).save(target)
+
+    monkeypatch.setattr("tools.gui_ops.pyautogui", MagicMock())
+    monkeypatch.setattr(
+        "tools.gui_ops.pyautogui.screenshot",
+        MagicMock(side_effect=Exception("Can't connect to display")),
+    )
+    monkeypatch.setattr(
+        "tools.gui_ops.subprocess.run",
+        MagicMock(return_value=MagicMock(returncode=0)),
+    )
+
+    result = gui_screenshot(str(target))
+
+    assert "Error taking screenshot" in result
+    assert "blank" in result or "headless" in result.lower()
 
 
 def test_gui_click_and_spatial_scoring():
