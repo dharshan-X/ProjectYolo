@@ -6,6 +6,17 @@ const fs = require('fs');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
 
+// Configure Chromium Ozone platform for native Wayland support on Linux
+if (process.platform === 'linux') {
+  const isWayland = Boolean(process.env.WAYLAND_DISPLAY || process.env.XDG_SESSION_TYPE === 'wayland');
+  const ozoneHint = process.env.YOLO_ELECTRON_OZONE || (isWayland ? 'auto' : 'x11');
+
+  if (ozoneHint !== 'x11') {
+    app.commandLine.appendSwitch('ozone-platform-hint', ozoneHint);
+    app.commandLine.appendSwitch('enable-features', 'WaylandWindowDecorations');
+  }
+}
+
 let mainWindow;
 let tray;
 let pyBridge;
