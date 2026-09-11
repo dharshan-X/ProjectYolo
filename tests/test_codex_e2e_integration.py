@@ -427,3 +427,77 @@ async def test_codex_non_streaming_responses(monkeypatch):
         assert data["model"] == "gpt-5.6-terra"
         assert len(data["output"]) == 1
         assert data["output"][0]["content"][0]["text"] == "Command completed successfully."
+
+
+@pytest.mark.anyio
+async def test_codex_internal_tool_commentary_streaming(monkeypatch):
+    """Verify YOLO streams internal tool executions as commentary output items in Responses SSE."""
+    yolo_model_server, app = _make_app(disable_auth=True, monkeypatch=monkeypatch)
+
+    async def mock_run_agent_turn(user_msg, session, signal_handler=None, memory_service=None):
+        if signal_handler:
+            # Emit internal tool 1: list_dir
+            await signal_handler(
+                f"__TOOL_CALL__:{json.dumps({'name': 'list_dir', 'args': {'path': 'docs'}, 'call_id': 'call_list_1'})}"
+            )
+            await signal_handler(
+                f"__TOOL_RESULT__:{json.dumps({'name': 'list_dir', 'result': '[DIR] superpowers', 'call_id': 'call_list_1'})}"
+            )
+            # Emit internal tool 2: read_file
+            await signal_handler(
+                f"__TOOL_CALL__:{json.dumps({'name': 'read_file', 'args': {'path': 'docs/plan.md'}, 'call_id': 'call_read_2'})}"
+            )
+            await signal_handler(
+                f"__TOOL_RESULT__:{json.dumps({'name': 'read_file', 'result': '# Aura Player Plan', 'call_id': 'call_read_2'})}"
+            )
+            # Emit final answer streaming delta
+            await signal_handler("STREAM:Here is the analyzed plan.")
+        return "Here is the analyzed plan."
+
+    monkeypatch.setattr(yolo_model_server.yolo_agent, "run_agent_turn", mock_run_agent_turn)
+
+    async with TestClient(TestServer(app)) as client:
+        payload = {
+            "model": "gpt-5.6-terra",
+            "stream": True,
+            "input": [
+                {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "analyse"}]}
+            ],
+        }
+        resp = await client.post("/v1/responses", json=payload)
+        assert resp.status == 200
+        raw_stream = await resp.text()
+        events = _parse_sse_events(raw_stream)
+
+        # Collect output items added
+        added_items = [e["data"] for e in events if e["event"] == "response.output_item.added"]
+        assert len(added_items) >= 3, f"Expected at least 2 commentary items + 1 final answer item, got {len(added_items)}"
+
+        # Verify Item 0: commentary for list_dir
+        assert added_items[0]["output_index"] == 0
+        assert added_items[0]["item"]["phase"] == "commentary"
+
+        # Verify Item 1: commentary for read_file
+        assert added_items[1]["output_index"] == 1
+        assert added_items[1]["item"]["phase"] == "commentary"
+
+        # Verify Item 2: final answer
+        assert added_items[2]["output_index"] == 2
+        assert added_items[2]["item"]["phase"] == "final_answer"
+
+        # Verify text deltas contain tool keywords
+        text_deltas = [e["data"]["delta"] for e in events if e["event"] == "response.output_text.delta"]
+        joined_deltas = " ".join(text_deltas)
+        assert "list_dir" in joined_deltas or "docs" in joined_deltas
+        assert "read_file" in joined_deltas or "plan.md" in joined_deltas
+        assert "Here is the analyzed plan." in joined_deltas
+
+        # Verify completed event has all items
+        completed_ev = next(e["data"] for e in events if e["event"] == "response.completed")
+        completed_output = completed_ev["response"]["output"]
+        assert len(completed_output) == 3
+        assert completed_output[0]["phase"] == "commentary"
+        assert completed_output[1]["phase"] == "commentary"
+        assert completed_output[2]["phase"] == "final_answer"
+        assert completed_output[2]["content"][0]["text"] == "Here is the analyzed plan."
+
