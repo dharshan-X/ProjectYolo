@@ -368,6 +368,9 @@ async def handle_list_models(request: web.Request) -> web.Response:
             "apply_patch_tool_type": "freeform",
             "web_search_tool_type": "text_and_image",
             "truncation_policy": {"mode": "auto"},
+            "supports_parallel_tool_calls": True,
+            "tool_mode": "code_mode_only",
+            "multi_agent_version": "v2",
             "context_window": 272000,
             "max_context_window": 872000,
         }
@@ -832,12 +835,16 @@ async def handle_responses(request: web.Request) -> web.Response:
     user_id = _api_key_to_user_id(api_key)
 
     try:
+        raw_tools = data.get("tools", [])
         session, user_msg = _build_yolo_session(
             user_id=user_id,
             incoming_messages=openai_messages,
             model_name=model,
-            client_tools=data.get("tools", []),
+            client_tools=raw_tools,
         )
+        # Detect Codex mode: Codex sends client_metadata in code_mode_only
+        if data.get("client_metadata") is not None:
+            session.codex_mode = True
     except Exception as e:
         return _openai_error(f"Failed to build session: {e}")
 
@@ -1001,6 +1008,10 @@ async def _handle_responses_stream(
     async def _run_turn():
         try:
             final = await yolo_agent.run_agent_turn(user_msg, session, signal_handler=_signal_handler, memory_service=memory_service)
+            if final == "__CLIENT_TOOL_DISPATCHED__":
+                # function_call was already queued via YOLO_CLIENT_TOOL signal;
+                # don't emit text output — stream loop handles it.
+                return
             if isinstance(final, str) and len(final) > prev_len:
                 await stream_queue.put(("delta", final[prev_len:]))
             await stream_queue.put(("done", final))

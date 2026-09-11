@@ -501,3 +501,194 @@ async def test_codex_internal_tool_commentary_streaming(monkeypatch):
         assert completed_output[2]["phase"] == "final_answer"
         assert completed_output[2]["content"][0]["text"] == "Here is the analyzed plan."
 
+
+# ── Codex Workspace Tool Routing Tests (Option A) ──
+
+
+@pytest.mark.anyio
+async def test_codex_mode_routes_run_bash_to_exec_command(monkeypatch):
+    """When codex_mode is True, run_bash tool calls emit function_call for exec_command."""
+    yolo_model_server, app = _make_app(disable_auth=True, monkeypatch=monkeypatch)
+
+    async def mock_run_agent_turn(user_msg, session, signal_handler=None, memory_service=None):
+        # Simulate the agent loop deciding to call run_bash
+        # In codex_mode, this should be routed to the client via signal_handler
+        if signal_handler:
+            call_payload = json.dumps({
+                "call_id": "call_bash_001",
+                "name": "exec_command",
+                "arguments": {"command": ["pytest tests/"]},
+            })
+            await signal_handler(f"YOLO_CLIENT_TOOL:{call_payload}")
+        return "__CLIENT_TOOL_DISPATCHED__"
+
+    monkeypatch.setattr(yolo_model_server.yolo_agent, "run_agent_turn", mock_run_agent_turn)
+
+    async with TestClient(TestServer(app)) as client:
+        req_payload = {
+            "model": "gpt-5.6-terra",
+            "stream": True,
+            "input": [
+                {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "Run the tests"}]},
+            ],
+            "client_metadata": {"workspace_kind": "project"},
+        }
+
+        resp = await client.post("/v1/responses", json=req_payload)
+        assert resp.status == 200
+
+        raw_stream = await resp.text()
+        events = _parse_sse_events(raw_stream)
+        event_names = [e["event"] for e in events]
+
+        # Must emit function_call events, NOT text output
+        assert "response.output_item.added" in event_names
+        assert "response.function_call_arguments.done" in event_names
+        assert "response.completed" in event_names
+
+        # The function_call item should target exec_command
+        item_added_events = [e for e in events if e["event"] == "response.output_item.added"]
+        fc_item = None
+        for ev in item_added_events:
+            if isinstance(ev["data"], dict) and ev["data"].get("item", {}).get("type") == "function_call":
+                fc_item = ev["data"]["item"]
+                break
+        assert fc_item is not None, "No function_call output_item.added event found"
+        assert fc_item["name"] == "exec_command"
+        assert fc_item["call_id"] == "call_bash_001"
+
+        # Verify arguments in function_call_arguments.done
+        args_done = next(
+            e["data"] for e in events
+            if e["event"] == "response.function_call_arguments.done"
+        )
+        parsed_args = json.loads(args_done["arguments"])
+        assert parsed_args["command"] == ["pytest tests/"]
+
+        # response.completed should have status=completed and include the function_call item
+        completed = next(e["data"] for e in events if e["event"] == "response.completed")
+        assert completed["response"]["status"] == "completed"
+        output_items = completed["response"]["output"]
+        assert any(item.get("type") == "function_call" for item in output_items)
+
+
+@pytest.mark.anyio
+async def test_codex_mode_internal_tools_still_stream_as_commentary(monkeypatch):
+    """Internal tools execute natively and stream as commentary even in codex_mode."""
+    yolo_model_server, app = _make_app(disable_auth=True, monkeypatch=monkeypatch)
+
+    async def mock_run_agent_turn(user_msg, session, signal_handler=None, memory_service=None):
+        if signal_handler:
+            # Simulate internal tool execution (memory_search)
+            call_info = json.dumps({"call_id": "tc_mem", "name": "memory_search", "args": {"query": "test"}})
+            await signal_handler(f"__TOOL_CALL__:{call_info}")
+            res_info = json.dumps({"call_id": "tc_mem", "name": "memory_search", "result": "No results"})
+            await signal_handler(f"__TOOL_RESULT__:{res_info}")
+            # Then stream the final answer
+            await signal_handler(f"{yolo_model_server.yolo_agent.TUIMessage.STREAM}:Searched memory, found nothing relevant.")
+        return "Searched memory, found nothing relevant."
+
+    monkeypatch.setattr(yolo_model_server.yolo_agent, "run_agent_turn", mock_run_agent_turn)
+
+    async with TestClient(TestServer(app)) as client:
+        req_payload = {
+            "model": "gpt-5.6-terra",
+            "stream": True,
+            "input": [
+                {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "Search memory"}]},
+            ],
+            "client_metadata": {"workspace_kind": "project"},
+        }
+
+        resp = await client.post("/v1/responses", json=req_payload)
+        assert resp.status == 200
+
+        raw_stream = await resp.text()
+        events = _parse_sse_events(raw_stream)
+        event_names = [e["event"] for e in events]
+
+        # Internal tools should appear as commentary, NOT as function_call
+        assert "response.completed" in event_names
+
+        # Check for commentary items (memory_search tool result)
+        commentary_items = [
+            e for e in events
+            if e["event"] == "response.output_item.added"
+            and isinstance(e["data"], dict)
+            and e["data"].get("item", {}).get("phase") == "commentary"
+        ]
+        assert len(commentary_items) >= 1, "Internal tool should stream as commentary"
+
+        # Should NOT have function_call items
+        fc_items = [
+            e for e in events
+            if e["event"] == "response.output_item.added"
+            and isinstance(e["data"], dict)
+            and e["data"].get("item", {}).get("type") == "function_call"
+        ]
+        assert len(fc_items) == 0, "Internal tools must NOT emit function_call events"
+
+
+@pytest.mark.anyio
+async def test_codex_models_include_tool_mode(monkeypatch):
+    """Verify /v1/models includes tool_mode=code_mode_only for Codex compatibility."""
+    _, app = _make_app(disable_auth=True, monkeypatch=monkeypatch)
+
+    async with TestClient(TestServer(app)) as client:
+        resp = await client.get("/v1/models")
+        assert resp.status == 200
+        data = await resp.json()
+
+        for m in data["data"]:
+            assert m.get("tool_mode") == "code_mode_only", (
+                f"Model {m['id']} missing tool_mode=code_mode_only"
+            )
+            assert m.get("supports_parallel_tool_calls") is True, (
+                f"Model {m['id']} missing supports_parallel_tool_calls"
+            )
+            assert m.get("multi_agent_version") == "v2", (
+                f"Model {m['id']} missing multi_agent_version=v2"
+            )
+
+
+def test_map_to_codex_tool_run_bash():
+    """Verify _map_to_codex_tool correctly translates run_bash → exec_command."""
+    from agent import _map_to_codex_tool
+
+    name, args = _map_to_codex_tool("run_bash", {"command": "pytest tests/"})
+    assert name == "exec_command"
+    assert args == {"command": ["pytest tests/"]}
+
+
+def test_map_to_codex_tool_write_file():
+    """Verify _map_to_codex_tool translates write_file to a heredoc exec_command."""
+    from agent import _map_to_codex_tool
+
+    name, args = _map_to_codex_tool("write_file", {"path": "/tmp/test.txt", "content": "hello world"})
+    assert name == "exec_command"
+    assert isinstance(args["command"], list)
+    cmd = args["command"][0]
+    assert "/tmp/test.txt" in cmd
+    assert "hello world" in cmd
+    assert "YOLO_HEREDOC_EOF" in cmd
+
+
+def test_map_to_codex_tool_make_dir():
+    """Verify _map_to_codex_tool translates make_dir to mkdir -p."""
+    from agent import _map_to_codex_tool
+
+    name, args = _map_to_codex_tool("make_dir", {"path": "/home/user/project"})
+    assert name == "exec_command"
+    assert "mkdir -p" in args["command"][0]
+    assert "/home/user/project" in args["command"][0]
+
+
+def test_map_to_codex_tool_git_commit():
+    """Verify _map_to_codex_tool translates git_commit with message."""
+    from agent import _map_to_codex_tool
+
+    name, args = _map_to_codex_tool("git_commit", {"message": "feat: add tests"})
+    assert name == "exec_command"
+    cmd = args["command"][0]
+    assert "git commit" in cmd
+    assert "feat: add tests" in cmd

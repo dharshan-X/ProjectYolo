@@ -92,6 +92,123 @@ PROMPTS_DIR = (
     (YOLO_HOME / "prompts") if (YOLO_HOME / "prompts").is_dir() else _LOCAL_PROMPTS_DIR
 )
 
+# ── Codex Client Tool Routing ──
+# When YOLO runs inside Codex (code_mode_only), workspace execution tools must be
+# emitted as function_call SSE events for Codex's exec_command / apply_patch handlers.
+# Internal/cognitive tools (memory, identity, skills) execute natively and stream as commentary.
+_CLIENT_TOOL_DISPATCHED = "__CLIENT_TOOL_DISPATCHED__"
+
+import shlex as _shlex
+
+# YOLO tool names that should be routed to Codex's exec_command when in codex_mode.
+CODEX_ROUTABLE_TOOLS = frozenset({
+    "run_bash", "run_command",
+    "write_file", "edit_file", "read_file",
+    "delete_file", "copy_file", "move_file",
+    "make_dir", "list_dir", "file_info",
+    "terminal_start", "terminal_send", "terminal_read",
+    "terminal_interactive_run", "terminal_stop",
+    "search_in_file",
+    "git_status", "git_diff", "git_log", "git_commit", "git_branch", "git_stash",
+    "codebase_search",
+})
+
+
+def _map_to_codex_tool(
+    tool_name: str, arguments: dict
+) -> tuple[str, dict]:
+    """Map a YOLO workspace tool call to a Codex exec_command invocation.
+
+    Returns (codex_tool_name, codex_arguments).
+    """
+    if tool_name in ("run_bash", "run_command"):
+        cmd = arguments.get("command") or arguments.get("cmd") or ""
+        return "exec_command", {"command": [cmd]}
+
+    if tool_name == "write_file":
+        path = arguments.get("path", "")
+        content = arguments.get("content", "")
+        # Use heredoc for safe multi-line write
+        cmd = f"cat > {_shlex.quote(path)} << 'YOLO_HEREDOC_EOF'\n{content}\nYOLO_HEREDOC_EOF"
+        return "exec_command", {"command": [cmd]}
+
+    if tool_name == "edit_file":
+        path = arguments.get("path", "")
+        old = arguments.get("old_text", arguments.get("old_str", ""))
+        new = arguments.get("new_text", arguments.get("new_str", ""))
+        if old and path:
+            # Use sed-style replacement via python one-liner for reliability
+            cmd = (
+                f"python3 -c \"import pathlib; p=pathlib.Path({repr(path)}); "
+                f"t=p.read_text(); p.write_text(t.replace({repr(old)}, {repr(new)}, 1))\""
+            )
+        else:
+            content = arguments.get("content", "")
+            cmd = f"cat > {_shlex.quote(path)} << 'YOLO_HEREDOC_EOF'\n{content}\nYOLO_HEREDOC_EOF"
+        return "exec_command", {"command": [cmd]}
+
+    if tool_name == "read_file":
+        path = arguments.get("path", "")
+        cmd = f"cat {_shlex.quote(path)}"
+        return "exec_command", {"command": [cmd]}
+
+    if tool_name == "delete_file":
+        path = arguments.get("path", "")
+        return "exec_command", {"command": [f"rm -f {_shlex.quote(path)}"]}
+
+    if tool_name == "copy_file":
+        src = arguments.get("source", arguments.get("src", ""))
+        dst = arguments.get("destination", arguments.get("dest", ""))
+        return "exec_command", {"command": [f"cp {_shlex.quote(src)} {_shlex.quote(dst)}"]}
+
+    if tool_name == "move_file":
+        src = arguments.get("source", arguments.get("src", ""))
+        dst = arguments.get("destination", arguments.get("dest", ""))
+        return "exec_command", {"command": [f"mv {_shlex.quote(src)} {_shlex.quote(dst)}"]}
+
+    if tool_name == "make_dir":
+        path = arguments.get("path", "")
+        return "exec_command", {"command": [f"mkdir -p {_shlex.quote(path)}"]}
+
+    if tool_name == "list_dir":
+        path = arguments.get("path", arguments.get("directory", "."))
+        return "exec_command", {"command": [f"ls -la {_shlex.quote(path)}"]}
+
+    if tool_name == "file_info":
+        path = arguments.get("path", "")
+        return "exec_command", {"command": [f"stat {_shlex.quote(path)}"]}
+
+    if tool_name == "search_in_file":
+        pattern = arguments.get("pattern", arguments.get("query", ""))
+        path = arguments.get("path", arguments.get("file", "."))
+        return "exec_command", {"command": [f"grep -rn {_shlex.quote(pattern)} {_shlex.quote(path)}"]}
+
+    if tool_name in ("git_status", "git_diff", "git_log", "git_commit", "git_branch", "git_stash"):
+        git_cmd = tool_name.replace("git_", "git ")
+        extra_args = ""
+        if tool_name == "git_commit":
+            msg = arguments.get("message", "auto-commit")
+            extra_args = f" -m {_shlex.quote(msg)}"
+        elif tool_name == "git_log":
+            n = arguments.get("n", arguments.get("count", 10))
+            extra_args = f" -n {n}"
+        elif tool_name == "git_diff":
+            target = arguments.get("target", arguments.get("ref", ""))
+            if target:
+                extra_args = f" {_shlex.quote(target)}"
+        return "exec_command", {"command": [f"{git_cmd}{extra_args}"]}
+
+    if tool_name == "codebase_search":
+        query = arguments.get("query", arguments.get("pattern", ""))
+        path = arguments.get("path", ".")
+        return "exec_command", {"command": [f"grep -rn {_shlex.quote(query)} {_shlex.quote(path)}"]}
+
+    # Fallback for terminal_* and any other routable tool: pass through as bash
+    cmd_parts = [f"{tool_name}"]
+    for k, v in arguments.items():
+        cmd_parts.append(f"# {k}={v}")
+    fallback_cmd = arguments.get("command", arguments.get("cmd", " ".join(cmd_parts)))
+    return "exec_command", {"command": [str(fallback_cmd)]}
 
 def _append_tool_result(
     session: Session,
@@ -206,6 +323,12 @@ def _turn_state(user_msg: Optional[Any], session: Session, memory_service: Any) 
                 if state["self_upgrade_active"] and state["experience_update_active"]:
                     break
 
+        if not any(m.get("role") == "user" for m in session.message_history):
+            session.message_history.append({"role": "user", "content": "Please proceed."})
+            session.mark_dirty()
+            state["turn_start_index"] = len(session.message_history) - 1
+            state["original_user_msg"] = "Please proceed."
+
     _normalize_single_system_message(session)
     return state
 
@@ -257,7 +380,7 @@ async def _execute_unanswered_tool_calls(
     unanswered: list[dict],
     session: Session,
     signal_handler: Optional[Callable],
-) -> bool:
+) -> bool | str:
     if not unanswered:
         return False
 
@@ -326,6 +449,24 @@ async def _execute_unanswered_tool_calls(
             )
             continue
 
+        # ── Codex mode: route workspace tools to client ──
+        codex_mode = getattr(session, "codex_mode", False)
+        if codex_mode and func_name in CODEX_ROUTABLE_TOOLS:
+            codex_name, codex_args = _map_to_codex_tool(func_name, args)
+            if signal_handler:
+                payload = json.dumps({
+                    "call_id": tc_id,
+                    "name": codex_name,
+                    "arguments": codex_args,
+                })
+                await signal_handler(f"YOLO_CLIENT_TOOL:{payload}")
+            # Don't add to message_history; Codex will send back function_call_output
+            # in the next turn. Return sentinel so the agent loop breaks.
+            return _CLIENT_TOOL_DISPATCHED
+            # Note: we return from the outer function, not from run_and_store.
+            # Only ONE client tool dispatch per turn; Codex handles parallel calls
+            # by receiving multiple function_call items, but we send one at a time.
+
         async def run_and_store(name=func_name, arguments=args, call_id=tc_id):
             try:
                 result = await execute_tool_direct(
@@ -387,7 +528,9 @@ def _deep_merge_tool_delta(target: dict, source: dict) -> None:
             target[key] = value
 
 
-def _normalize_tool_calls(tool_calls_acc: list) -> list[dict]:
+def _normalize_tool_calls(tool_calls_acc: Optional[list]) -> list[dict]:
+    if not tool_calls_acc:
+        return []
     valid_tool_calls = []
     seen_ids: set[str] = set()
     for tc in tool_calls_acc:
@@ -679,10 +822,10 @@ def _append_assistant_round(session: Session, round_result: dict) -> bool:
         "role": "assistant",
         "content": round_result["content"],
     }
-    if round_result["reasoning_content"]:
+    if round_result.get("reasoning_content"):
         msg_dict["reasoning_content"] = round_result["reasoning_content"]
 
-    valid_tool_calls = _normalize_tool_calls(round_result["tool_calls"])
+    valid_tool_calls = _normalize_tool_calls(round_result.get("tool_calls"))
     if valid_tool_calls:
         msg_dict["tool_calls"] = valid_tool_calls
 
@@ -827,7 +970,14 @@ async def run_agent_turn(
 ) -> str:
     turn_state = _turn_state(user_msg, session, memory_service)
 
-    max_agent_iterations = int(os.getenv("AGENT_MAX_ITERATIONS", "50"))
+    raw_max_iterations = os.getenv("AGENT_MAX_ITERATIONS", "unlimited").strip().lower()
+    if raw_max_iterations in {"unlimited", "none", "inf", "infinity", "-1", "0", ""}:
+        max_agent_iterations = float("inf")
+    else:
+        try:
+            max_agent_iterations = float(raw_max_iterations)
+        except ValueError:
+            max_agent_iterations = float("inf")
     agent_iterations = 0
     while agent_iterations < max_agent_iterations:
         agent_iterations += 1
@@ -859,9 +1009,14 @@ async def run_agent_turn(
                 first["args"],
             )
 
-        if await _execute_unanswered_tool_calls(
+        unanswered_result = await _execute_unanswered_tool_calls(
             _find_unanswered_tool_calls(session), session, signal_handler
-        ):
+        )
+        if unanswered_result == _CLIENT_TOOL_DISPATCHED:
+            # Workspace tool dispatched to Codex client; break agent loop.
+            # The SSE stream already emitted function_call events.
+            return _CLIENT_TOOL_DISPATCHED
+        if unanswered_result:
             continue
 
         _normalize_single_system_message(session)
