@@ -278,3 +278,71 @@ def test_extract_responses_input_function_call_output():
     assert messages[1]["tool_call_id"] == "call_pytest_001"
     assert messages[1]["content"] == "12 passed in 0.45s"
 
+
+@pytest.mark.anyio
+async def test_responses_streaming_emits_function_call(monkeypatch):
+    yolo_model_server, app = _make_app(disable_auth=True)
+    from aiohttp.test_utils import TestClient, TestServer
+
+    # Mock run_agent_turn to emit a client tool call
+    async def mock_run_agent_turn(user_msg, session, signal_handler=None, memory_service=None):
+        if signal_handler:
+            # Emit tool call signal
+            call_payload = json.dumps({
+                "call_id": "call_cmd_42",
+                "name": "exec_command",
+                "arguments": {"command": "pytest tests/"},
+            })
+            await signal_handler(f"YOLO_CLIENT_TOOL:{call_payload}")
+        return "[Tool dispatched to client]"
+
+    monkeypatch.setattr(yolo_model_server.yolo_agent, "run_agent_turn", mock_run_agent_turn)
+
+    async with TestClient(TestServer(app)) as client:
+        req_payload = {
+            "model": "yolo",
+            "stream": True,
+            "input": [{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "Run tests"}]}],
+            "tools": [{"type": "function", "name": "exec_command", "parameters": {}}],
+        }
+        resp = await client.post("/v1/responses", json=req_payload)
+        assert resp.status == 200
+        text = await resp.text()
+        assert "response.output_item.added" in text
+        assert "function_call" in text
+        assert "call_cmd_42" in text
+        assert "exec_command" in text
+        assert "response.function_call_arguments.done" in text
+        assert "response.completed" in text
+
+
+@pytest.mark.anyio
+async def test_responses_streaming_text(monkeypatch):
+    yolo_model_server, app = _make_app(disable_auth=True)
+    from aiohttp.test_utils import TestClient, TestServer
+
+    async def mock_run_agent_turn(user_msg, session, signal_handler=None, memory_service=None):
+        if signal_handler:
+            await signal_handler(f"{yolo_model_server.yolo_agent.TUIMessage.STREAM}:Hello ")
+            await signal_handler(f"{yolo_model_server.yolo_agent.TUIMessage.STREAM}:Hello world")
+        return "Hello world"
+
+    monkeypatch.setattr(yolo_model_server.yolo_agent, "run_agent_turn", mock_run_agent_turn)
+
+    async with TestClient(TestServer(app)) as client:
+        req_payload = {
+            "model": "yolo",
+            "stream": True,
+            "input": [{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "Hi"}]}],
+        }
+        resp = await client.post("/v1/responses", json=req_payload)
+        assert resp.status == 200
+        text = await resp.text()
+        assert "response.output_item.added" in text
+        assert "response.output_text.delta" in text
+        assert "response.output_text.done" in text
+        assert "response.completed" in text
+        assert "Hello world" in text
+
+
+

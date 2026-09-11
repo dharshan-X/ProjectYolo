@@ -885,6 +885,12 @@ async def _handle_responses_stream(
             prev_len = len(content)
             if delta:
                 await stream_queue.put(("delta", delta))
+        elif signal_text.startswith("YOLO_CLIENT_TOOL:"):
+            try:
+                tool_info = json.loads(signal_text[len("YOLO_CLIENT_TOOL:") :])
+            except Exception:
+                tool_info = {}
+            await stream_queue.put(("function_call", tool_info))
 
     async def _run_turn():
         try:
@@ -907,8 +913,18 @@ async def _handle_responses_stream(
     await resp.write(f"event: response.in_progress\ndata: {json.dumps({'type':'response.in_progress','response':{'id':resp_id}})}\n\n".encode())
 
     output_item_id = f"msg_{uuid.uuid4().hex[:8]}"
-    await resp.write(f"event: response.output_item.added\ndata: {json.dumps({'type':'response.output_item.added','output_index':0,'item':{'id':output_item_id,'type':'message','role':'assistant','status':'in_progress','content':[]}})}\n\n".encode())
-    await resp.write(f"event: response.content_part.added\ndata: {json.dumps({'type':'response.content_part.added','output_index':0,'content_index':0,'item_id':output_item_id,'part':{'type':'output_text','text':''}})}\n\n".encode())
+    msg_item_started = False
+
+    async def _ensure_msg_item_started():
+        nonlocal msg_item_started
+        if not msg_item_started:
+            await resp.write(
+                f"event: response.output_item.added\ndata: {json.dumps({'type':'response.output_item.added','output_index':0,'item':{'id':output_item_id,'type':'message','role':'assistant','status':'in_progress','content':[]}})}\n\n".encode()
+            )
+            await resp.write(
+                f"event: response.content_part.added\ndata: {json.dumps({'type':'response.content_part.added','output_index':0,'content_index':0,'item_id':output_item_id,'part':{'type':'output_text','text':''}})}\n\n".encode()
+            )
+            msg_item_started = True
 
     try:
         while True:
@@ -918,10 +934,46 @@ async def _handle_responses_stream(
                 await resp.write(b": keepalive\n\n")
                 continue
 
-            if event_type == "delta":
+            if event_type == "function_call":
+                call_id = payload.get("call_id", f"call_{uuid.uuid4().hex[:8]}")
+                name = payload.get("name", "exec_command")
+                args = payload.get("arguments", {})
+                args_str = json.dumps(args) if isinstance(args, dict) else str(args)
+
+                item = {
+                    "id": call_id,
+                    "type": "function_call",
+                    "name": name,
+                    "call_id": call_id,
+                    "status": "in_progress",
+                    "arguments": "",
+                }
+                await resp.write(f"event: response.output_item.added\ndata: {json.dumps({'type':'response.output_item.added','output_index':0,'item':item})}\n\n".encode())
+                await resp.write(f"event: response.function_call_arguments.delta\ndata: {json.dumps({'type':'response.function_call_arguments.delta','output_index':0,'item_id':call_id,'call_id':call_id,'delta':args_str})}\n\n".encode())
+                await resp.write(f"event: response.function_call_arguments.done\ndata: {json.dumps({'type':'response.function_call_arguments.done','output_index':0,'item_id':call_id,'call_id':call_id,'arguments':args_str})}\n\n".encode())
+                item["status"] = "completed"
+                item["arguments"] = args_str
+                await resp.write(f"event: response.output_item.done\ndata: {json.dumps({'type':'response.output_item.done','output_index':0,'item':item})}\n\n".encode())
+
+                # Complete response for this tool dispatch turn
+                completed = {
+                    "type": "response.completed",
+                    "response": {
+                        "id": resp_id,
+                        "object": "response",
+                        "status": "completed",
+                        "model": model,
+                        "output": [item],
+                    },
+                }
+                await resp.write(f"event: response.completed\ndata: {json.dumps(completed)}\n\n".encode())
+                break
+            elif event_type == "delta":
+                await _ensure_msg_item_started()
                 evt = {"type": "response.output_text.delta", "delta": payload, "output_index": 0, "content_index": 0, "item_id": output_item_id}
                 await resp.write(f"event: response.output_text.delta\ndata: {json.dumps(evt)}\n\n".encode())
             elif event_type == "done":
+                await _ensure_msg_item_started()
                 # finalize - include item_id and text for compatibility
                 await resp.write(f"event: response.output_text.done\ndata: {json.dumps({'type':'response.output_text.done','output_index':0,'content_index':0,'item_id':output_item_id,'text':payload})}\n\n".encode())
                 await resp.write(f"event: response.content_part.done\ndata: {json.dumps({'type':'response.content_part.done','output_index':0,'content_index':0,'item_id':output_item_id,'part':{'type':'output_text','text':payload}})}\n\n".encode())
