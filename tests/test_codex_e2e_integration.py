@@ -24,11 +24,12 @@ def anyio_backend():
     return "asyncio"
 
 
-def _make_app(disable_auth: bool = True):
-    if disable_auth:
-        os.environ["YOLO_MODEL_DISABLE_AUTH"] = "true"
+def _make_app(disable_auth: bool = True, monkeypatch=None):
+    val = "true" if disable_auth else "false"
+    if monkeypatch:
+        monkeypatch.setenv("YOLO_MODEL_DISABLE_AUTH", val)
     else:
-        os.environ["YOLO_MODEL_DISABLE_AUTH"] = "false"
+        os.environ["YOLO_MODEL_DISABLE_AUTH"] = val
     import importlib
     import yolo_model_server
     importlib.reload(yolo_model_server)
@@ -59,9 +60,9 @@ def _parse_sse_events(raw_text: str) -> List[Dict[str, Any]]:
 
 
 @pytest.mark.anyio
-async def test_codex_models_handshake_endpoint():
+async def test_codex_models_handshake_endpoint(monkeypatch):
     """Verify GET /v1/models?client_version=0.154.0 conforms to Codex specification."""
-    yolo_model_server, app = _make_app(disable_auth=True)
+    yolo_model_server, app = _make_app(disable_auth=True, monkeypatch=monkeypatch)
 
     async with TestClient(TestServer(app)) as client:
         resp = await client.get("/v1/models?client_version=0.154.0")
@@ -100,7 +101,7 @@ async def test_codex_models_handshake_endpoint():
 @pytest.mark.anyio
 async def test_codex_turn_1_client_tool_streaming(monkeypatch):
     """Verify Turn 1: Codex sends prompt + client tools, YOLO streams function_call events."""
-    yolo_model_server, app = _make_app(disable_auth=True)
+    yolo_model_server, app = _make_app(disable_auth=True, monkeypatch=monkeypatch)
 
     captured_turns = []
 
@@ -195,7 +196,7 @@ async def test_codex_turn_1_client_tool_streaming(monkeypatch):
 @pytest.mark.anyio
 async def test_codex_turn_2_tool_output_and_completion(monkeypatch):
     """Verify Turn 2: Codex returns function_call_output, YOLO produces text response."""
-    yolo_model_server, app = _make_app(disable_auth=True)
+    yolo_model_server, app = _make_app(disable_auth=True, monkeypatch=monkeypatch)
 
     captured_turns = []
 
@@ -280,7 +281,7 @@ async def test_codex_full_end_to_end_handshake_and_multi_turn_flow(monkeypatch):
     4. Codex executes tool in local sandbox and sends Turn 2: POST /v1/responses with tool output
     5. YOLO validates input and streams completed response back to Codex
     """
-    yolo_model_server, app = _make_app(disable_auth=True)
+    yolo_model_server, app = _make_app(disable_auth=True, monkeypatch=monkeypatch)
 
     turn_counter = 0
     executed_turns = []
@@ -403,7 +404,7 @@ async def test_codex_full_end_to_end_handshake_and_multi_turn_flow(monkeypatch):
 @pytest.mark.anyio
 async def test_codex_non_streaming_responses(monkeypatch):
     """Verify non-streaming POST /v1/responses returns full response JSON structure."""
-    yolo_model_server, app = _make_app(disable_auth=True)
+    yolo_model_server, app = _make_app(disable_auth=True, monkeypatch=monkeypatch)
 
     async def mock_run_agent_turn(user_msg, session, signal_handler=None, memory_service=None):
         return "Command completed successfully."

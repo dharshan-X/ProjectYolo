@@ -12,11 +12,12 @@ def anyio_backend():
     return "asyncio"
 
 
-def _make_app(disable_auth=True):
-    if disable_auth:
-        os.environ["YOLO_MODEL_DISABLE_AUTH"] = "true"
+def _make_app(disable_auth: bool = True, monkeypatch=None):
+    val = "true" if disable_auth else "false"
+    if monkeypatch:
+        monkeypatch.setenv("YOLO_MODEL_DISABLE_AUTH", val)
     else:
-        os.environ["YOLO_MODEL_DISABLE_AUTH"] = "false"
+        os.environ["YOLO_MODEL_DISABLE_AUTH"] = val
     import importlib
     import yolo_model_server
     importlib.reload(yolo_model_server)
@@ -155,7 +156,7 @@ async def test_chat_completions_stream_success(monkeypatch):
 
 @pytest.mark.anyio
 async def test_chat_completions_auth_required_when_enabled(monkeypatch):
-    yolo_model_server, app = _make_app(disable_auth=False)
+    yolo_model_server, app = _make_app(disable_auth=False, monkeypatch=monkeypatch)
     monkeypatch.setenv("YOLO_MODEL_API_KEYS", "secret123")
     monkeypatch.setattr(yolo_model_server, "_get_allowed_keys", lambda: ["secret123"])
 
@@ -178,7 +179,7 @@ async def test_chat_completions_auth_required_when_enabled(monkeypatch):
 
 @pytest.mark.anyio
 async def test_anthropic_messages_non_stream(monkeypatch):
-    yolo_model_server, app = _make_app(disable_auth=True)
+    yolo_model_server, app = _make_app(disable_auth=True, monkeypatch=monkeypatch)
     monkeypatch.setattr(yolo_model_server.yolo_agent, "run_agent_turn", AsyncMock(return_value="Anthropic hello"))
 
     client = await _make_client(app)
@@ -197,7 +198,7 @@ async def test_anthropic_messages_non_stream(monkeypatch):
 
 @pytest.mark.anyio
 async def test_anthropic_messages_stream(monkeypatch):
-    yolo_model_server, app = _make_app(disable_auth=True)
+    yolo_model_server, app = _make_app(disable_auth=True, monkeypatch=monkeypatch)
 
     async def fake_run(user_msg, session, signal_handler=None, memory_service=None):
         if signal_handler:
@@ -221,12 +222,20 @@ async def test_anthropic_messages_stream(monkeypatch):
 
 def test_build_yolo_session_model_aliases():
     yolo_model_server, _ = _make_app(disable_auth=True)
-    s, _ = yolo_model_server._build_yolo_session(user_id=1, incoming_messages=[{"role": "user", "content": "hi"}], model_name="yolo")
+    tools = [{"type": "function", "name": "exec_command"}]
+    s, _ = yolo_model_server._build_yolo_session(
+        user_id=1,
+        incoming_messages=[{"role": "user", "content": "hi"}],
+        model_name="yolo",
+        client_tools=tools,
+    )
     assert s.yolo_mode is True
     assert s.think_mode is False
+    assert s.client_tools == tools
 
     s2, _ = yolo_model_server._build_yolo_session(user_id=1, incoming_messages=[{"role": "user", "content": "hi"}], model_name="yolo-think")
     assert s2.think_mode is True
+    assert s2.client_tools == []
 
     s3, _ = yolo_model_server._build_yolo_session(user_id=1, incoming_messages=[{"role": "user", "content": "hi"}], model_name="yolo-safe")
     assert s3.yolo_mode is False
@@ -279,10 +288,26 @@ def test_extract_responses_input_function_call_output():
     assert messages[1]["tool_call_id"] == "call_pytest_001"
     assert messages[1]["content"] == "12 passed in 0.45s"
 
+    # Verify explicit null output maps to empty string "" instead of "None"
+    null_data = {
+        "input": [
+            {
+                "type": "function_call_output",
+                "call_id": "call_null_001",
+                "output": None,
+            }
+        ]
+    }
+    null_messages = yolo_model_server._extract_responses_input(null_data)
+    assert len(null_messages) == 1
+    assert null_messages[0]["role"] == "tool"
+    assert null_messages[0]["tool_call_id"] == "call_null_001"
+    assert null_messages[0]["content"] == ""
+
 
 @pytest.mark.anyio
 async def test_responses_streaming_emits_function_call(monkeypatch):
-    yolo_model_server, app = _make_app(disable_auth=True)
+    yolo_model_server, app = _make_app(disable_auth=True, monkeypatch=monkeypatch)
     from aiohttp.test_utils import TestClient, TestServer
 
     # Mock run_agent_turn to emit a client tool call
@@ -319,7 +344,7 @@ async def test_responses_streaming_emits_function_call(monkeypatch):
 
 @pytest.mark.anyio
 async def test_responses_streaming_text(monkeypatch):
-    yolo_model_server, app = _make_app(disable_auth=True)
+    yolo_model_server, app = _make_app(disable_auth=True, monkeypatch=monkeypatch)
     from aiohttp.test_utils import TestClient, TestServer
 
     async def mock_run_agent_turn(user_msg, session, signal_handler=None, memory_service=None):
@@ -358,7 +383,7 @@ async def test_client_tool_routing_signal(monkeypatch):
     async def capture_signal(sig):
         emitted_signals.append(sig)
 
-    yolo_model_server, _ = _make_app(disable_auth=True)
+    yolo_model_server, _ = _make_app(disable_auth=True, monkeypatch=monkeypatch)
     routed = yolo_model_server._route_or_execute_tool(
         tool_name="exec_command",
         arguments={"command": "ls -la"},
@@ -379,7 +404,7 @@ async def test_client_tool_routing_native_fallback(monkeypatch):
         {"type": "function", "name": "exec_command", "parameters": {}}
     ]
 
-    yolo_model_server, _ = _make_app(disable_auth=True)
+    yolo_model_server, _ = _make_app(disable_auth=True, monkeypatch=monkeypatch)
 
     async def mock_execute_tool_direct(name, args, user_id=1, signal_handler=None, session=None, call_id=None, confirmed=False):
         return f"executed {name} natively"
@@ -393,4 +418,56 @@ async def test_client_tool_routing_native_fallback(monkeypatch):
         session=session,
     )
     assert res == "executed read_file natively"
+
+
+@pytest.mark.anyio
+async def test_client_tool_routing_none_function_field(monkeypatch):
+    from session import Session
+    session = Session(user_id=123)
+    session.client_tools = [
+        {"type": "function", "function": None},
+        {"type": "function", "function": {"name": "exec_command"}},
+    ]
+
+    emitted_signals = []
+    async def capture_signal(sig):
+        emitted_signals.append(sig)
+
+    yolo_model_server, _ = _make_app(disable_auth=True, monkeypatch=monkeypatch)
+    routed = yolo_model_server._route_or_execute_tool(
+        tool_name="exec_command",
+        arguments={"command": "pwd"},
+        session=session,
+        signal_handler=capture_signal,
+    )
+    assert asyncio.iscoroutine(routed)
+    res = await routed
+    assert res == "__CLIENT_TOOL_DISPATCHED__"
+    assert any("YOLO_CLIENT_TOOL:" in s for s in emitted_signals)
+
+
+@pytest.mark.anyio
+async def test_responses_streaming_non_dict_payload_resilience(monkeypatch):
+    yolo_model_server, app = _make_app(disable_auth=True, monkeypatch=monkeypatch)
+    from aiohttp.test_utils import TestClient, TestServer
+
+    async def mock_run_agent_turn(user_msg, session, signal_handler=None, memory_service=None):
+        if signal_handler:
+            # Emit non-dict JSON string
+            await signal_handler('YOLO_CLIENT_TOOL:"non_dict_string"')
+        return "[Handled]"
+
+    monkeypatch.setattr(yolo_model_server.yolo_agent, "run_agent_turn", mock_run_agent_turn)
+
+    async with TestClient(TestServer(app)) as client:
+        req_payload = {
+            "model": "yolo",
+            "stream": True,
+            "input": [{"type": "message", "role": "user", "content": "test"}],
+        }
+        resp = await client.post("/v1/responses", json=req_payload)
+        assert resp.status == 200
+        text = await resp.text()
+        assert "response.output_item.added" in text
+        assert "response.completed" in text
 

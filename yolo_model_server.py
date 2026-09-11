@@ -229,7 +229,7 @@ async def _route_or_execute_tool(
     """
     client_tools = getattr(session, "client_tools", [])
     client_tool_names = {
-        t.get("name") or t.get("function", {}).get("name")
+        t.get("name") or (t.get("function") or {}).get("name")
         for t in client_tools
         if isinstance(t, dict)
     }
@@ -287,10 +287,14 @@ def _extract_responses_input(data: Dict[str, Any]) -> List[Dict[str, Any]]:
                 item_type = item.get("type", "")
                 if item_type == "function_call_output":
                     call_id = item.get("call_id") or item.get("id") or ""
-                    out = item.get("output", "")
-                    if isinstance(out, (dict, list)):
+                    out = item.get("output")
+                    if out is None:
+                        out = ""
+                    elif isinstance(out, (dict, list)):
                         out = json.dumps(out)
-                    messages.append({"role": "tool", "tool_call_id": str(call_id), "content": str(out)})
+                    else:
+                        out = str(out)
+                    messages.append({"role": "tool", "tool_call_id": str(call_id), "content": out})
                     continue
 
                 role = item.get("role", "user")
@@ -933,6 +937,8 @@ async def _handle_responses_stream(
         elif signal_text.startswith("YOLO_CLIENT_TOOL:"):
             try:
                 tool_info = json.loads(signal_text[len("YOLO_CLIENT_TOOL:") :])
+                if not isinstance(tool_info, dict):
+                    tool_info = {}
             except Exception:
                 tool_info = {}
             await stream_queue.put(("function_call", tool_info))
@@ -980,6 +986,8 @@ async def _handle_responses_stream(
                 continue
 
             if event_type == "function_call":
+                if not isinstance(payload, dict):
+                    payload = {}
                 call_id = payload.get("call_id", f"call_{uuid.uuid4().hex[:8]}")
                 name = payload.get("name", "exec_command")
                 args = payload.get("arguments", {})
