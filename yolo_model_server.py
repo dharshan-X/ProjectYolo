@@ -37,7 +37,7 @@ import time
 import uuid
 import hashlib
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 # Ensure project root on path when run as script
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -211,6 +211,51 @@ def _build_yolo_session(
     # and let run_agent_turn's unanswered tool handling process it. For opaque mode we treat
     # last content as prompt.
     return session, user_msg
+
+
+async def _route_or_execute_tool(
+    tool_name: str,
+    arguments: Dict[str, Any],
+    session: Any,
+    signal_handler: Optional[Callable[[str], Awaitable[None]]] = None,
+    call_id: Optional[str] = None,
+    confirmed: Optional[bool] = None,
+) -> str:
+    """
+    Routes a tool execution request.
+    If the tool is in session.client_tools, emits YOLO_CLIENT_TOOL: signal
+    so it can be streamed to the client (e.g. Codex) for sandboxed execution.
+    Otherwise, executes natively via YOLO tool_dispatcher.
+    """
+    client_tools = getattr(session, "client_tools", [])
+    client_tool_names = {
+        t.get("name") or t.get("function", {}).get("name")
+        for t in client_tools
+        if isinstance(t, dict)
+    }
+
+    if tool_name in client_tool_names:
+        cid = call_id or f"call_{uuid.uuid4().hex[:12]}"
+        if signal_handler:
+            payload = json.dumps({"call_id": cid, "name": tool_name, "arguments": arguments})
+            res = signal_handler(f"YOLO_CLIENT_TOOL:{payload}")
+            if asyncio.iscoroutine(res) or hasattr(res, "__await__"):
+                await res
+        return "__CLIENT_TOOL_DISPATCHED__"
+
+    # Otherwise fallback to YOLO native execution
+    from tool_dispatcher import execute_tool_direct
+
+    is_confirmed = confirmed if confirmed is not None else getattr(session, "yolo_mode", False)
+    return await execute_tool_direct(
+        tool_name,
+        arguments,
+        user_id=getattr(session, "user_id", 1),
+        signal_handler=signal_handler,
+        session=session,
+        call_id=call_id,
+        confirmed=is_confirmed,
+    )
 
 
 def _extract_responses_input(data: Dict[str, Any]) -> List[Dict[str, Any]]:

@@ -1,4 +1,5 @@
 """Tests for yolo_model_server — OpenAI compat layer for Claude Code / Codex."""
+import asyncio
 import os
 import json
 import pytest
@@ -345,4 +346,51 @@ async def test_responses_streaming_text(monkeypatch):
         assert "Hello world" in text
 
 
+@pytest.mark.anyio
+async def test_client_tool_routing_signal(monkeypatch):
+    from session import Session
+    session = Session(user_id=123)
+    session.client_tools = [
+        {"type": "function", "name": "exec_command", "parameters": {}}
+    ]
+
+    emitted_signals = []
+    async def capture_signal(sig):
+        emitted_signals.append(sig)
+
+    yolo_model_server, _ = _make_app(disable_auth=True)
+    routed = yolo_model_server._route_or_execute_tool(
+        tool_name="exec_command",
+        arguments={"command": "ls -la"},
+        session=session,
+        signal_handler=capture_signal
+    )
+    assert asyncio.iscoroutine(routed)
+    res = await routed
+    assert res == "__CLIENT_TOOL_DISPATCHED__"
+    assert any("YOLO_CLIENT_TOOL:" in s for s in emitted_signals)
+
+
+@pytest.mark.anyio
+async def test_client_tool_routing_native_fallback(monkeypatch):
+    from session import Session
+    session = Session(user_id=123)
+    session.client_tools = [
+        {"type": "function", "name": "exec_command", "parameters": {}}
+    ]
+
+    yolo_model_server, _ = _make_app(disable_auth=True)
+
+    async def mock_execute_tool_direct(name, args, user_id=1, signal_handler=None, session=None, call_id=None, confirmed=False):
+        return f"executed {name} natively"
+
+    import tool_dispatcher
+    monkeypatch.setattr(tool_dispatcher, "execute_tool_direct", mock_execute_tool_direct)
+
+    res = await yolo_model_server._route_or_execute_tool(
+        tool_name="read_file",
+        arguments={"path": "test.txt"},
+        session=session,
+    )
+    assert res == "executed read_file natively"
 
