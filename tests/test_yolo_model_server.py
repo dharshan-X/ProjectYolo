@@ -248,3 +248,33 @@ def test_api_key_to_user_id_deterministic():
     b = yolo_model_server._api_key_to_user_id("yolo-local")
     assert a == b
     assert 1 <= a <= 2000001
+
+
+def test_extract_responses_input_function_call_output():
+    yolo_model_server, _ = _make_app(disable_auth=True)
+    raw_data = {
+        "input": [
+            {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "Run tests"}]},
+            {
+                "type": "function_call_output",
+                "call_id": "call_pytest_001",
+                "output": "12 passed in 0.45s",
+            },
+        ],
+        "tools": [
+            {
+                "type": "function",
+                "name": "exec_command",
+                "description": "Execute a command in Codex sandbox",
+                "parameters": {"type": "object", "properties": {"command": {"type": "string"}}},
+            }
+        ],
+    }
+    messages = yolo_model_server._extract_responses_input(raw_data)
+    assert len(messages) == 2
+    assert messages[0]["role"] == "user"
+    assert messages[0]["content"] == "Run tests"
+    assert messages[1]["role"] == "tool"
+    assert messages[1]["tool_call_id"] == "call_pytest_001"
+    assert messages[1]["content"] == "12 passed in 0.45s"
+

@@ -151,6 +151,7 @@ def _build_yolo_session(
     user_id: int,
     incoming_messages: List[Dict[str, Any]],
     model_name: str,
+    client_tools: Optional[List[Dict[str, Any]]] = None,
 ) -> tuple[Session, Any]:
     """
     Build an ephemeral Session for a single model request.
@@ -180,6 +181,7 @@ def _build_yolo_session(
         session = Session(user_id=user_id, message_history=[yolo_system], yolo_mode=yolo_mode)
         session.think_mode = think_mode
         session.think_mode_policy = think_policy
+        session.client_tools = client_tools or []
         return session, "Hello"
 
     # Last message is the current user turn
@@ -194,6 +196,7 @@ def _build_yolo_session(
     session = Session(user_id=user_id, message_history=history, yolo_mode=yolo_mode)
     session.think_mode = think_mode
     session.think_mode_policy = think_policy
+    session.client_tools = client_tools or []
 
     # Last message content is user_msg; handle tool role edge
     if last_msg.get("role") == "tool":
@@ -236,6 +239,15 @@ def _extract_responses_input(data: Dict[str, Any]) -> List[Dict[str, Any]]:
                 if item.strip():
                     messages.append({"role": "user", "content": item.strip()})
             elif isinstance(item, dict):
+                item_type = item.get("type", "")
+                if item_type == "function_call_output":
+                    call_id = item.get("call_id") or item.get("id") or ""
+                    out = item.get("output", "")
+                    if isinstance(out, (dict, list)):
+                        out = json.dumps(out)
+                    messages.append({"role": "tool", "tool_call_id": str(call_id), "content": str(out)})
+                    continue
+
                 role = item.get("role", "user")
                 content = item.get("content", "")
                 # content may be str or list of parts like [{"type":"input_text","text":"..."}]
@@ -366,7 +378,12 @@ async def handle_chat_completions(request: web.Request) -> web.Response:
 
     # Build ephemeral session
     try:
-        session, user_msg = _build_yolo_session(user_id=user_id, incoming_messages=messages, model_name=model)
+        session, user_msg = _build_yolo_session(
+            user_id=user_id,
+            incoming_messages=messages,
+            model_name=model,
+            client_tools=data.get("tools", []),
+        )
     except Exception as e:
         return _openai_error(f"Failed to build session: {e}")
 
@@ -766,7 +783,12 @@ async def handle_responses(request: web.Request) -> web.Response:
     user_id = _api_key_to_user_id(api_key)
 
     try:
-        session, user_msg = _build_yolo_session(user_id=user_id, incoming_messages=openai_messages, model_name=model)
+        session, user_msg = _build_yolo_session(
+            user_id=user_id,
+            incoming_messages=openai_messages,
+            model_name=model,
+            client_tools=data.get("tools", []),
+        )
     except Exception as e:
         return _openai_error(f"Failed to build session: {e}")
 
