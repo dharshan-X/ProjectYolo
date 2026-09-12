@@ -135,6 +135,14 @@ def audit_log(tool: str, args: Dict[str, Any], status: str, detail: str = ""):
     try:
         with open(YOLO_LOG_FILE, "a", encoding="utf-8") as f:
             f.write(json.dumps(log_entry) + "\n")
+    except (OSError, IOError):
+        # In sandboxed environments (e.g. Codex bwrap) ~/.yolo may be mounted read-only.
+        # Fall back to /tmp/agent_log.txt safely without polluting stderr.
+        try:
+            with open(Path("/tmp/agent_log.txt"), "a", encoding="utf-8") as f:
+                f.write(json.dumps(log_entry) + "\n")
+        except Exception:
+            pass
     except Exception as e:
         import sys
         sys.stderr.write(f"Failed to write audit log: {e}\n")

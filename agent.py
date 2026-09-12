@@ -113,6 +113,7 @@ CODEX_ROUTABLE_TOOLS = frozenset({
     "git_status", "git_diff", "git_log", "git_commit", "git_branch", "git_stash",
     "codebase_search",
     "web_search", "search_web", "browse_url", "read_url_content", "fetch_web_page",
+    "browser_navigate", "navigate_browser", "open_url",
     "read_user_identity", "user_identity",
     "memory_search", "search_memory",
 })
@@ -259,7 +260,7 @@ def _map_to_codex_tool(
         cmd = f"/home/dharshan/ProjectYolo/.venv/bin/python3 -c \"from tools.web_ops import web_search; print(web_search({escaped_q}))\""
         return "exec_command", {"cmd": cmd}
 
-    if clean_name in ("browse_url", "read_url_content", "fetch_web_page"):
+    if clean_name in ("browse_url", "read_url_content", "fetch_web_page", "browser_navigate", "navigate_browser", "open_url"):
         url = arguments.get("url", "")
         escaped_url = _shlex.quote(url)
         cmd = f"/home/dharshan/ProjectYolo/.venv/bin/python3 -c \"from tools.web_ops import browse_url; print(browse_url({escaped_url}))\""
@@ -545,25 +546,17 @@ async def _execute_unanswered_tool_calls(
             client_tool_names = {name for name in client_tool_names if name}
 
             clean_name = _normalize_tool_name(func_name)
-            is_client_tool = (
-                clean_name in CODEX_ROUTABLE_TOOLS
-                or func_name in CODEX_ROUTABLE_TOOLS
-                or (func_name in client_tool_names and not func_name.startswith("mcp__yolo__"))
-                or (clean_name in client_tool_names and not clean_name.startswith("mcp__yolo__"))
-            )
-
-            if is_client_tool:
-                codex_name, codex_args = _map_to_codex_tool(clean_name, args, client_tool_names)
-                if signal_handler:
-                    payload = json.dumps({
-                        "call_id": tc_id,
-                        "name": codex_name,
-                        "arguments": codex_args,
-                    })
-                    await signal_handler(f"YOLO_CLIENT_TOOL:{payload}")
-                # Don't add to message_history; Codex will send back function_call_output
-                # in the next turn. Return sentinel so the agent loop breaks.
-                return _CLIENT_TOOL_DISPATCHED
+            codex_name, codex_args = _map_to_codex_tool(clean_name, args, client_tool_names)
+            if signal_handler:
+                payload = json.dumps({
+                    "call_id": tc_id,
+                    "name": codex_name,
+                    "arguments": codex_args,
+                })
+                await signal_handler(f"YOLO_CLIENT_TOOL:{payload}")
+            # Don't add to message_history; Codex will send back function_call_output
+            # in the next turn. Return sentinel so the agent loop breaks.
+            return _CLIENT_TOOL_DISPATCHED
                 # Note: we return from the outer function, not from run_and_store.
                 # Only ONE client tool dispatch per turn; Codex handles parallel calls
                 # by receiving multiple function_call items, but we send one at a time.
