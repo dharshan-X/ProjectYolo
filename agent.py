@@ -256,24 +256,24 @@ def _map_to_codex_tool(
 
     if clean_name in ("web_search", "search_web"):
         q = arguments.get("query", "")
-        escaped_q = _shlex.quote(q)
-        cmd = f"/home/dharshan/ProjectYolo/.venv/bin/python3 -c \"from tools.web_ops import web_search; print(web_search({escaped_q}))\""
+        escaped_q = _shlex.quote(json.dumps({"query": q}))
+        cmd = f"/home/dharshan/ProjectYolo/.venv/bin/python3 /home/dharshan/ProjectYolo/run_tool.py web_search {escaped_q}"
         return "exec_command", {"cmd": cmd}
 
     if clean_name in ("browse_url", "read_url_content", "fetch_web_page", "browser_navigate", "navigate_browser", "open_url"):
         url = arguments.get("url", "")
-        escaped_url = _shlex.quote(url)
-        cmd = f"/home/dharshan/ProjectYolo/.venv/bin/python3 -c \"from tools.web_ops import browse_url; print(browse_url({escaped_url}))\""
+        escaped_url = _shlex.quote(json.dumps({"url": url}))
+        cmd = f"/home/dharshan/ProjectYolo/.venv/bin/python3 /home/dharshan/ProjectYolo/run_tool.py browse_url {escaped_url}"
         return "exec_command", {"cmd": cmd}
 
     if clean_name in ("read_user_identity", "user_identity"):
-        cmd = "/home/dharshan/ProjectYolo/.venv/bin/python3 -c \"from tools.identity_ops import read_user_identity; print(read_user_identity())\""
+        cmd = "/home/dharshan/ProjectYolo/.venv/bin/python3 /home/dharshan/ProjectYolo/run_tool.py read_user_identity"
         return "exec_command", {"cmd": cmd}
 
     if clean_name in ("memory_search", "search_memory"):
         q = arguments.get("query", "")
-        escaped_q = _shlex.quote(q)
-        cmd = f"/home/dharshan/ProjectYolo/.venv/bin/python3 -c \"from tools.memory_ops import memory_search; print(memory_search({escaped_q}, user_id=1))\""
+        escaped_q = _shlex.quote(json.dumps({"query": q}))
+        cmd = f"/home/dharshan/ProjectYolo/.venv/bin/python3 /home/dharshan/ProjectYolo/run_tool.py memory_search {escaped_q}"
         return "exec_command", {"cmd": cmd}
 
     if clean_name.startswith("terminal_"):
@@ -283,15 +283,9 @@ def _map_to_codex_tool(
         fallback_cmd = arguments.get("cmd", arguments.get("command", " ".join(cmd_parts)))
         return "exec_command", {"cmd": str(fallback_cmd)}
 
-    # General bridge for any other YOLO tool into exec_command
+    # General bridge for any other YOLO tool into exec_command via run_tool.py
     json_args = _shlex.quote(json.dumps(arguments))
-    cmd = (
-        f"/home/dharshan/ProjectYolo/.venv/bin/python3 -c \"import asyncio, json; "
-        f"from tool_dispatcher import execute_tool_direct; "
-        f"from session import Session; "
-        f"s = Session(user_id=1, message_history=[], yolo_mode=True); "
-        f"print(asyncio.run(execute_tool_direct({repr(clean_name)}, json.loads({json_args}), 1, s, confirmed=True)))\""
-    )
+    cmd = f"/home/dharshan/ProjectYolo/.venv/bin/python3 /home/dharshan/ProjectYolo/run_tool.py {_shlex.quote(clean_name)} {json_args}"
     return "exec_command", {"cmd": cmd}
 
 
