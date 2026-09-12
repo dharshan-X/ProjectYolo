@@ -725,10 +725,10 @@ def test_map_to_codex_tool_non_workspace_yolo_tools():
     assert name == "mcp__yolo__browser_navigate"
     assert args == {"url": "https://news.ycombinator.com"}
 
-    # When client does not advertise mcp tool, preserves native tool name
+    # When client does not advertise mcp tool, web_search routes to exec_command so Codex renders default tooling component
     name, args = _map_to_codex_tool("web_search", {"query": "AI news"})
-    assert name == "web_search"
-    assert args == {"query": "AI news"}
+    assert name == "exec_command"
+    assert "web_search" in args["cmd"]
 
     # Already prefixed with mcp__yolo__
     name, args = _map_to_codex_tool(

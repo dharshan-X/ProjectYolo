@@ -21,17 +21,33 @@ def web_search(query: str) -> str:
                     f"Title: {r['title']}\nURL: {r['href']}\nSnippet: {r['body']}\n"
                 )
 
-        if not results:
-            # If DDG fails or is empty, suggest using the browser directly
-            audit_log("web_search", {"query": query}, "warning", "No results found")
-            return "No search results found via API. Please use `browser_navigate` to search on Google or Bing directly."
-
-        output = "\n".join(results)
-        audit_log("web_search", {"query": query}, "success")
-        return output
+        if results:
+            output = "\n".join(results)
+            audit_log("web_search", {"query": query}, "success")
+            return output
     except Exception as e:
-        audit_log("web_search", {"query": query}, "error", str(e))
-        return f"Error performing web search via API: {e}. Suggestion: Use `browser_navigate` to perform a manual search."
+        audit_log("web_search", {"query": query}, "warning", f"DDG error: {e}")
+
+    # Robust fallback via Wikipedia Search API
+    try:
+        import urllib.request, urllib.parse, json
+        url = f"https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch={urllib.parse.quote(query)}&format=json"
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64)"})
+        with urllib.request.urlopen(req, timeout=10) as r:
+            data = json.loads(r.read())
+            items = data.get("query", {}).get("search", [])[:5]
+            if items:
+                wiki_results = []
+                for it in items:
+                    clean_snippet = BeautifulSoup(it.get("snippet", ""), "html.parser").get_text()
+                    wiki_results.append(f"Title: {it.get('title')}\nURL: https://en.wikipedia.org/wiki/{urllib.parse.quote(it.get('title'))}\nSnippet: {clean_snippet}\n")
+                output = "\n".join(wiki_results)
+                audit_log("web_search", {"query": query}, "success", "wikipedia_fallback")
+                return output
+    except Exception as exc:
+        audit_log("web_search", {"query": query}, "error", f"Fallback failed: {exc}")
+
+    return "No search results found. Please use `browser_navigate` to perform a manual search."
 
 
 @register_tool()

@@ -112,6 +112,9 @@ CODEX_ROUTABLE_TOOLS = frozenset({
     "search_in_file",
     "git_status", "git_diff", "git_log", "git_commit", "git_branch", "git_stash",
     "codebase_search",
+    "web_search", "search_web", "browse_url", "read_url_content", "fetch_web_page",
+    "read_user_identity", "user_identity",
+    "memory_search", "search_memory",
 })
 
 
@@ -140,110 +143,14 @@ def _map_to_codex_tool(
     In Codex mode:
     - apply_patch: {"patch": ...}
     - Workspace tools (shell, files, git, terminal): exec_command: {"cmd": ...}
+    - Web search, identity, memory tools: exec_command: {"cmd": ...}
     - Tools matching known client tools: use client tool name directly
 
     Returns (codex_tool_name, codex_arguments).
     """
     clean_name = _normalize_tool_name(tool_name)
 
-    if clean_name == "apply_patch":
-        patch = arguments.get("patch", "")
-        return "apply_patch", {"patch": str(patch)}
-
-    if clean_name in ("exec_command", "run_bash", "run_command", "bash", "sh", "shell", "execute_command", "exec"):
-        cmd = arguments.get("cmd") or arguments.get("command") or ""
-        out = {"cmd": str(cmd)}
-        workdir = arguments.get("workdir") or arguments.get("cwd")
-        if workdir:
-            out["workdir"] = str(workdir)
-        return "exec_command", out
-
-    if tool_name == "write_file":
-        path = arguments.get("path", "")
-        content = arguments.get("content", "")
-        # Use heredoc for safe multi-line write
-        cmd = f"cat > {_shlex.quote(path)} << 'YOLO_HEREDOC_EOF'\n{content}\nYOLO_HEREDOC_EOF"
-        return "exec_command", {"cmd": cmd}
-
-    if tool_name == "edit_file":
-        path = arguments.get("path", "")
-        old = arguments.get("old_text", arguments.get("old_str", ""))
-        new = arguments.get("new_text", arguments.get("new_str", ""))
-        if old and path:
-            # Use python replacement for reliability
-            cmd = (
-                f"python3 -c \"import pathlib; p=pathlib.Path({repr(path)}); "
-                f"t=p.read_text(); p.write_text(t.replace({repr(old)}, {repr(new)}, 1))\""
-            )
-        else:
-            content = arguments.get("content", "")
-            cmd = f"cat > {_shlex.quote(path)} << 'YOLO_HEREDOC_EOF'\n{content}\nYOLO_HEREDOC_EOF"
-        return "exec_command", {"cmd": cmd}
-
-    if tool_name == "read_file":
-        path = arguments.get("path", "")
-        cmd = f"cat {_shlex.quote(path)}"
-        return "exec_command", {"cmd": cmd}
-
-    if tool_name == "delete_file":
-        path = arguments.get("path", "")
-        return "exec_command", {"cmd": f"rm -f {_shlex.quote(path)}"}
-
-    if tool_name == "copy_file":
-        src = arguments.get("source", arguments.get("src", ""))
-        dst = arguments.get("destination", arguments.get("dest", ""))
-        return "exec_command", {"cmd": f"cp {_shlex.quote(src)} {_shlex.quote(dst)}"}
-
-    if tool_name == "move_file":
-        src = arguments.get("source", arguments.get("src", ""))
-        dst = arguments.get("destination", arguments.get("dest", ""))
-        return "exec_command", {"cmd": f"mv {_shlex.quote(src)} {_shlex.quote(dst)}"}
-
-    if tool_name == "make_dir":
-        path = arguments.get("path", "")
-        return "exec_command", {"cmd": f"mkdir -p {_shlex.quote(path)}"}
-
-    if tool_name == "list_dir":
-        path = arguments.get("path", arguments.get("directory", "."))
-        return "exec_command", {"cmd": f"ls -la {_shlex.quote(path)}"}
-
-    if tool_name == "file_info":
-        path = arguments.get("path", "")
-        return "exec_command", {"cmd": f"stat {_shlex.quote(path)}"}
-
-    if tool_name == "search_in_file":
-        pattern = arguments.get("pattern", arguments.get("query", ""))
-        path = arguments.get("path", arguments.get("file", "."))
-        return "exec_command", {"cmd": f"grep -rn {_shlex.quote(pattern)} {_shlex.quote(path)}"}
-
-    if tool_name in ("git_status", "git_diff", "git_log", "git_commit", "git_branch", "git_stash"):
-        git_cmd = tool_name.replace("git_", "git ")
-        extra_args = ""
-        if tool_name == "git_commit":
-            msg = arguments.get("message", "auto-commit")
-            extra_args = f" -m {_shlex.quote(msg)}"
-        elif tool_name == "git_log":
-            n = arguments.get("n", arguments.get("count", 10))
-            extra_args = f" -n {n}"
-        elif tool_name == "git_diff":
-            target = arguments.get("target", arguments.get("ref", ""))
-            if target:
-                extra_args = f" {_shlex.quote(target)}"
-        return "exec_command", {"cmd": f"{git_cmd}{extra_args}"}
-
-    if tool_name == "codebase_search":
-        query = arguments.get("query", arguments.get("pattern", ""))
-        path = arguments.get("path", ".")
-        return "exec_command", {"cmd": f"grep -rn {_shlex.quote(query)} {_shlex.quote(path)}"}
-
-    if tool_name.startswith("terminal_"):
-        cmd_parts = [f"{tool_name}"]
-        for k, v in arguments.items():
-            cmd_parts.append(f"# {k}={v}")
-        fallback_cmd = arguments.get("cmd", arguments.get("command", " ".join(cmd_parts)))
-        return "exec_command", {"cmd": str(fallback_cmd)}
-
-    # Check client tool matches
+    # Check client tool matches first if explicitly provided by client
     known = client_tool_names or set()
     if tool_name in known:
         return tool_name, arguments
@@ -257,7 +164,134 @@ def _map_to_codex_tool(
     if tool_name.startswith("mcp__") and tool_name in known:
         return tool_name, arguments
 
-    return tool_name, arguments
+    if clean_name == "apply_patch":
+        patch = arguments.get("patch", "")
+        return "apply_patch", {"patch": str(patch)}
+
+    if clean_name in ("exec_command", "run_bash", "run_command", "bash", "sh", "shell", "execute_command", "exec"):
+        cmd = arguments.get("cmd") or arguments.get("command") or ""
+        out = {"cmd": str(cmd)}
+        workdir = arguments.get("workdir") or arguments.get("cwd")
+        if workdir:
+            out["workdir"] = str(workdir)
+        return "exec_command", out
+
+    if clean_name in ("write_file", "write_to_file"):
+        path = arguments.get("path", "")
+        content = arguments.get("content", "")
+        # Use heredoc for safe multi-line write
+        cmd = f"cat > {_shlex.quote(path)} << 'YOLO_HEREDOC_EOF'\n{content}\nYOLO_HEREDOC_EOF"
+        return "exec_command", {"cmd": cmd}
+
+    if clean_name in ("edit_file", "replace_file_content"):
+        path = arguments.get("path", "")
+        old = arguments.get("old_text", arguments.get("old_str", ""))
+        new = arguments.get("new_text", arguments.get("new_str", ""))
+        if old and path:
+            cmd = (
+                f"python3 -c \"import pathlib; p=pathlib.Path({repr(path)}); "
+                f"t=p.read_text(); p.write_text(t.replace({repr(old)}, {repr(new)}, 1))\""
+            )
+        else:
+            content = arguments.get("content", "")
+            cmd = f"cat > {_shlex.quote(path)} << 'YOLO_HEREDOC_EOF'\n{content}\nYOLO_HEREDOC_EOF"
+        return "exec_command", {"cmd": cmd}
+
+    if clean_name in ("read_file", "view_file"):
+        path = arguments.get("path", "")
+        cmd = f"cat {_shlex.quote(path)}"
+        return "exec_command", {"cmd": cmd}
+
+    if clean_name == "delete_file":
+        path = arguments.get("path", "")
+        return "exec_command", {"cmd": f"rm -f {_shlex.quote(path)}"}
+
+    if clean_name == "copy_file":
+        src = arguments.get("source", arguments.get("src", ""))
+        dst = arguments.get("destination", arguments.get("dest", ""))
+        return "exec_command", {"cmd": f"cp {_shlex.quote(src)} {_shlex.quote(dst)}"}
+
+    if clean_name == "move_file":
+        src = arguments.get("source", arguments.get("src", ""))
+        dst = arguments.get("destination", arguments.get("dest", ""))
+        return "exec_command", {"cmd": f"mv {_shlex.quote(src)} {_shlex.quote(dst)}"}
+
+    if clean_name == "make_dir":
+        path = arguments.get("path", "")
+        return "exec_command", {"cmd": f"mkdir -p {_shlex.quote(path)}"}
+
+    if clean_name in ("list_dir", "list_directory"):
+        path = arguments.get("path", arguments.get("directory", "."))
+        return "exec_command", {"cmd": f"ls -la {_shlex.quote(path)}"}
+
+    if clean_name == "file_info":
+        path = arguments.get("path", "")
+        return "exec_command", {"cmd": f"stat {_shlex.quote(path)}"}
+
+    if clean_name == "search_in_file":
+        pattern = arguments.get("pattern", arguments.get("query", ""))
+        path = arguments.get("path", arguments.get("file", "."))
+        return "exec_command", {"cmd": f"grep -rn {_shlex.quote(pattern)} {_shlex.quote(path)}"}
+
+    if clean_name in ("git_status", "git_diff", "git_log", "git_commit", "git_branch", "git_stash"):
+        git_cmd = clean_name.replace("git_", "git ")
+        extra_args = ""
+        if clean_name == "git_commit":
+            msg = arguments.get("message", "auto-commit")
+            extra_args = f" -m {_shlex.quote(msg)}"
+        elif clean_name == "git_log":
+            n = arguments.get("n", arguments.get("count", 10))
+            extra_args = f" -n {n}"
+        elif clean_name == "git_diff":
+            target = arguments.get("target", arguments.get("ref", ""))
+            if target:
+                extra_args = f" {_shlex.quote(target)}"
+        return "exec_command", {"cmd": f"{git_cmd}{extra_args}"}
+
+    if clean_name in ("codebase_search", "find_by_name", "grep_search"):
+        query = arguments.get("query", arguments.get("pattern", ""))
+        path = arguments.get("path", ".")
+        return "exec_command", {"cmd": f"grep -rn {_shlex.quote(query)} {_shlex.quote(path)}"}
+
+    if clean_name in ("web_search", "search_web"):
+        q = arguments.get("query", "")
+        escaped_q = _shlex.quote(q)
+        cmd = f"/home/dharshan/ProjectYolo/.venv/bin/python3 -c \"from tools.web_ops import web_search; print(web_search({escaped_q}))\""
+        return "exec_command", {"cmd": cmd}
+
+    if clean_name in ("browse_url", "read_url_content", "fetch_web_page"):
+        url = arguments.get("url", "")
+        escaped_url = _shlex.quote(url)
+        cmd = f"/home/dharshan/ProjectYolo/.venv/bin/python3 -c \"from tools.web_ops import browse_url; print(browse_url({escaped_url}))\""
+        return "exec_command", {"cmd": cmd}
+
+    if clean_name in ("read_user_identity", "user_identity"):
+        cmd = "/home/dharshan/ProjectYolo/.venv/bin/python3 -c \"from tools.identity_ops import read_user_identity; print(read_user_identity())\""
+        return "exec_command", {"cmd": cmd}
+
+    if clean_name in ("memory_search", "search_memory"):
+        q = arguments.get("query", "")
+        escaped_q = _shlex.quote(q)
+        cmd = f"/home/dharshan/ProjectYolo/.venv/bin/python3 -c \"from tools.memory_ops import memory_search; print(memory_search({escaped_q}, user_id=1))\""
+        return "exec_command", {"cmd": cmd}
+
+    if clean_name.startswith("terminal_"):
+        cmd_parts = [f"{clean_name}"]
+        for k, v in arguments.items():
+            cmd_parts.append(f"# {k}={v}")
+        fallback_cmd = arguments.get("cmd", arguments.get("command", " ".join(cmd_parts)))
+        return "exec_command", {"cmd": str(fallback_cmd)}
+
+    # General bridge for any other YOLO tool into exec_command
+    json_args = _shlex.quote(json.dumps(arguments))
+    cmd = (
+        f"/home/dharshan/ProjectYolo/.venv/bin/python3 -c \"import asyncio, json; "
+        f"from tool_dispatcher import execute_tool_direct; "
+        f"from session import Session; "
+        f"s = Session(user_id=1, message_history=[], yolo_mode=True); "
+        f"print(asyncio.run(execute_tool_direct({repr(clean_name)}, json.loads({json_args}), 1, s, confirmed=True)))\""
+    )
+    return "exec_command", {"cmd": cmd}
 
 
 def _append_tool_result(
