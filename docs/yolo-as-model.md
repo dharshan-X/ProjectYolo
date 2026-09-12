@@ -181,7 +181,26 @@ See `.env.example` for defaults.
 - Empty response → ensure underlying LLM configured (`LLM_PROVIDER`, `OPENAI_API_KEY` etc. `llm_router.py:187`); check `health` `model` field.
 - `No gateway selected` → `server.py --mode yolo-model` (not `telegram`).
 
-### 8. Tests
+### 8. YOLO as MCP Server (Codex, Claude Desktop, Cursor)
+
+In addition to serving as an LLM provider, YOLO exposes its complete tool catalog (110+ tools spanning Tiered Memory, GUI Perception, Swarm Orchestration, Deep Research, etc.) as a standard **Model Context Protocol (MCP)** server via `yolo_mcp_server.py`.
+
+#### Configure in Codex (`~/.codex/config.toml`):
+
+```toml
+[mcp_servers.yolo]
+command = "/home/dharshan/ProjectYolo/.venv/bin/python"
+args = ["/home/dharshan/ProjectYolo/yolo_mcp_server.py"]
+startup_timeout_sec = 60
+```
+
+#### Inspect registered MCP tools:
+
+```bash
+.venv/bin/python yolo_mcp_server.py --list
+```
+
+### 9. Tests
 
 ```bash
 # E2E Codex handshake & multi-turn verification
@@ -189,4 +208,7 @@ See `.env.example` for defaults.
 
 # Model server unit & integration tests
 .venv/bin/pytest tests/test_yolo_model_server.py -v
+
+# MCP server tool discovery and execution tests
+.venv/bin/pytest tests/test_yolo_mcp_server.py -v
 ```
