@@ -116,13 +116,17 @@ CODEX_ROUTABLE_TOOLS = frozenset({
 
 
 def _map_to_codex_tool(
-    tool_name: str, arguments: dict
+    tool_name: str,
+    arguments: dict,
+    client_tool_names: Optional[set[str]] = None,
 ) -> tuple[str, dict]:
-    """Map a YOLO workspace tool call to a Codex exec_command invocation.
+    """Map a tool call to a Codex client tool invocation.
 
-    Codex expects:
-    - exec_command: {"cmd": "<shell command string>"} (optional: "workdir")
-    - apply_patch: {"patch": "<patch text>"}
+    In Codex mode:
+    - apply_patch: {"patch": ...}
+    - Workspace tools (shell, files, git, terminal): exec_command: {"cmd": ...}
+    - Tools matching known client tools: use client tool name directly
+    - All other YOLO tools: route as MCP tool to Codex's yolo server: mcp__yolo__<tool_name>
 
     Returns (codex_tool_name, codex_arguments).
     """
@@ -216,12 +220,27 @@ def _map_to_codex_tool(
         path = arguments.get("path", ".")
         return "exec_command", {"cmd": f"grep -rn {_shlex.quote(query)} {_shlex.quote(path)}"}
 
-    # Fallback for terminal_* and any other routable tool: pass through as bash
-    cmd_parts = [f"{tool_name}"]
-    for k, v in arguments.items():
-        cmd_parts.append(f"# {k}={v}")
-    fallback_cmd = arguments.get("cmd", arguments.get("command", " ".join(cmd_parts)))
-    return "exec_command", {"cmd": str(fallback_cmd)}
+    if tool_name.startswith("terminal_"):
+        cmd_parts = [f"{tool_name}"]
+        for k, v in arguments.items():
+            cmd_parts.append(f"# {k}={v}")
+        fallback_cmd = arguments.get("cmd", arguments.get("command", " ".join(cmd_parts)))
+        return "exec_command", {"cmd": str(fallback_cmd)}
+
+    # Check client tool matches
+    known = client_tool_names or set()
+    if tool_name in known:
+        return tool_name, arguments
+
+    mcp_name = f"mcp__yolo__{tool_name}"
+    if mcp_name in known:
+        return mcp_name, arguments
+
+    if tool_name.startswith("mcp__"):
+        return tool_name, arguments
+
+    # Route any other YOLO tool to Codex's yolo MCP server
+    return mcp_name, arguments
 
 
 def _append_tool_result(
@@ -463,10 +482,17 @@ async def _execute_unanswered_tool_calls(
             )
             continue
 
-        # ── Codex mode: route workspace tools to client ──
+        # ── Codex mode: route all tools to client (native workspace or MCP) ──
         codex_mode = getattr(session, "codex_mode", False)
-        if codex_mode and func_name in CODEX_ROUTABLE_TOOLS:
-            codex_name, codex_args = _map_to_codex_tool(func_name, args)
+        if codex_mode:
+            client_tools = getattr(session, "client_tools", [])
+            client_tool_names = {
+                t.get("name") or (t.get("function") or {}).get("name")
+                for t in client_tools
+                if isinstance(t, dict)
+            }
+            client_tool_names = {name for name in client_tool_names if name}
+            codex_name, codex_args = _map_to_codex_tool(func_name, args, client_tool_names)
             if signal_handler:
                 payload = json.dumps({
                     "call_id": tc_id,

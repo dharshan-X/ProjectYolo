@@ -200,8 +200,19 @@ def _build_yolo_session(
 
     # Last message content is user_msg; handle tool role edge
     if last_msg.get("role") == "tool":
-        # Anthropic/Codex rarely send tool as last; treat as user text
-        user_msg = _get_text_content(last_msg.get("content", ""))
+        has_preceding_assistant_call = any(
+            m.get("role") == "assistant" and any(
+                tc.get("id") == last_msg.get("tool_call_id")
+                for tc in (m.get("tool_calls") or [])
+                if isinstance(tc, dict)
+            )
+            for m in prior
+        )
+        if has_preceding_assistant_call:
+            history.append(last_msg)
+            user_msg = None
+        else:
+            user_msg = _get_text_content(last_msg.get("content", ""))
     else:
         user_msg = last_msg.get("content", "")
         # If last_msg has tool_calls already, we keep it in history and set user_msg to content
@@ -866,9 +877,8 @@ async def handle_responses(request: web.Request) -> web.Response:
             model_name=model,
             client_tools=raw_tools,
         )
-        # Detect Codex mode: Codex sends client_metadata in code_mode_only
-        if data.get("client_metadata") is not None:
-            session.codex_mode = True
+        # In Responses API (wire_api=responses), session operates in codex_mode
+        session.codex_mode = True
     except Exception as e:
         return _openai_error(f"Failed to build session: {e}")
 

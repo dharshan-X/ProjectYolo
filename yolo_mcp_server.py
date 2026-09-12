@@ -70,22 +70,38 @@ async def handle_call_tool(
 ) -> List[types.TextContent]:
     """Handle tools/call request from MCP client."""
     args = arguments or {}
-    logger.info("Executing tool: %s with args: %s", name, list(args.keys()))
+
+    # Defensive prefix stripping: Codex or clients may pass mcp__yolo__tool or yolo__tool
+    clean_name = name
+    if clean_name.startswith("mcp__yolo__"):
+        clean_name = clean_name[len("mcp__yolo__"):]
+    elif clean_name.startswith("yolo__"):
+        clean_name = clean_name[len("yolo__"):]
+    elif clean_name.startswith("mcp__"):
+        parts = clean_name.split("__", 2)
+        if len(parts) == 3:
+            clean_name = parts[2]
+
+    logger.info("Executing tool: %s (resolved: %s) with args: %s", name, clean_name, list(args.keys()))
 
     # Ephemeral session with yolo_mode=True for autonomous execution without interactive prompts
     session = Session(user_id=1, message_history=[], yolo_mode=True)
 
     try:
         result = await execute_tool_direct(
-            func_name=name,
+            func_name=clean_name,
             func_args=args,
             user_id=1,
             session=session,
             confirmed=True,
         )
-        return [types.TextContent(type="text", text=str(result))]
+        if isinstance(result, (dict, list)):
+            res_text = json.dumps(result, indent=2)
+        else:
+            res_text = str(result)
+        return [types.TextContent(type="text", text=res_text)]
     except Exception as exc:
-        logger.error("Error executing tool %s: %s", name, exc)
+        logger.error("Error executing tool %s (%s): %s", name, clean_name, exc)
         return [types.TextContent(type="text", text=f"Error executing {name}: {exc}")]
 
 

@@ -69,6 +69,24 @@ async def test_mcp_server_executes_identity_and_memory_stats():
 
 
 @pytest.mark.anyio
+async def test_mcp_server_executes_prefixed_tool_names():
+    """Verify handle_call_tool strips mcp__yolo__ and yolo__ prefixes sent by Codex."""
+    # Test mcp__yolo__ prefix
+    res1 = await handle_call_tool(name="mcp__yolo__read_user_identity", arguments={})
+    assert len(res1) == 1
+    assert isinstance(res1[0], types.TextContent)
+    assert "Error:" not in res1[0].text
+    assert len(res1[0].text) > 0
+
+    # Test yolo__ prefix
+    res2 = await handle_call_tool(name="yolo__read_user_identity", arguments={})
+    assert len(res2) == 1
+    assert isinstance(res2[0], types.TextContent)
+    assert "Error:" not in res2[0].text
+    assert len(res2[0].text) > 0
+
+
+@pytest.mark.anyio
 async def test_mcp_server_handles_tool_execution_error():
     """Verify handle_call_tool gracefully reports unknown tools or execution errors."""
     res = await handle_call_tool(name="non_existent_tool_xyz", arguments={})

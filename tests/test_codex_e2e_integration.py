@@ -711,3 +711,95 @@ def test_map_to_codex_tool_apply_patch_direct():
     assert name == "apply_patch"
     assert args == {"patch": "*** Begin Patch\n*** End Patch"}
 
+
+def test_map_to_codex_tool_non_workspace_yolo_tools():
+    """Verify non-workspace YOLO tools are mapped to mcp__yolo__<tool> for Codex."""
+    from agent import _map_to_codex_tool
+
+    # browser_navigate
+    name, args = _map_to_codex_tool("browser_navigate", {"url": "https://news.ycombinator.com"})
+    assert name == "mcp__yolo__browser_navigate"
+    assert args == {"url": "https://news.ycombinator.com"}
+
+    # web_search
+    name, args = _map_to_codex_tool("web_search", {"query": "AI news"})
+    assert name == "mcp__yolo__web_search"
+    assert args == {"query": "AI news"}
+
+    # already prefixed
+    name, args = _map_to_codex_tool("mcp__yolo__memory_search", {"query": "facts"})
+    assert name == "mcp__yolo__memory_search"
+    assert args == {"query": "facts"}
+
+
+def test_map_to_codex_tool_client_tools_override():
+    """Verify client_tool_names matches take precedence when known by client."""
+    from agent import _map_to_codex_tool
+
+    # If client advertises web_search directly
+    name, args = _map_to_codex_tool("web_search", {"query": "test"}, client_tool_names={"web_search"})
+    assert name == "web_search"
+
+    # If client advertises mcp__yolo__web_search
+    name, args = _map_to_codex_tool("web_search", {"query": "test"}, client_tool_names={"mcp__yolo__web_search"})
+    assert name == "mcp__yolo__web_search"
+
+
+@pytest.mark.anyio
+async def test_codex_turn_dispatches_mcp_function_call(monkeypatch):
+    """Verify in Codex mode, non-workspace tools like browser_navigate are emitted as mcp__yolo__ function calls."""
+    yolo_model_server, app = _make_app(disable_auth=True, monkeypatch=monkeypatch)
+
+    async def mock_run_agent_turn(user_msg, session, signal_handler=None, memory_service=None):
+        assert getattr(session, "codex_mode", False) is True
+        if signal_handler:
+            call_payload = json.dumps({
+                "call_id": "call_nav_123",
+                "name": "mcp__yolo__browser_navigate",
+                "arguments": {"url": "https://news.ycombinator.com"},
+            })
+            await signal_handler(f"YOLO_CLIENT_TOOL:{call_payload}")
+        return "__CLIENT_TOOL_DISPATCHED__"
+
+    monkeypatch.setattr(yolo_model_server.yolo_agent, "run_agent_turn", mock_run_agent_turn)
+
+    async with TestClient(TestServer(app)) as client:
+        req_payload = {
+            "model": "gpt-5.6-terra",
+            "stream": True,
+            "input": [
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "Check hacker news"}],
+                }
+            ],
+            "tools": [
+                {
+                    "type": "function",
+                    "name": "mcp__yolo__browser_navigate",
+                    "description": "Navigate to URL",
+                    "parameters": {"type": "object", "properties": {"url": {"type": "string"}}},
+                }
+            ],
+        }
+
+        resp = await client.post("/v1/responses", json=req_payload)
+        assert resp.status == 200
+        raw_stream = await resp.text()
+        events = _parse_sse_events(raw_stream)
+
+        # Verify response.output_item.added has mcp__yolo__browser_navigate
+        item_added = next(e["data"] for e in events if e["event"] == "response.output_item.added")
+        item = item_added["item"]
+        assert item["type"] == "function_call"
+        assert item["name"] == "mcp__yolo__browser_navigate"
+        assert item["call_id"] == "call_nav_123"
+
+        # Verify completion
+        resp_completed = next(e["data"] for e in events if e["event"] == "response.completed")
+        assert resp_completed["response"]["status"] == "completed"
+        output_items = resp_completed["response"]["output"]
+        assert len(output_items) == 1
+        assert output_items[0]["name"] == "mcp__yolo__browser_navigate"
+
