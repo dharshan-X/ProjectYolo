@@ -102,6 +102,7 @@ import shlex as _shlex
 
 # YOLO tool names that should be routed to Codex's exec_command when in codex_mode.
 CODEX_ROUTABLE_TOOLS = frozenset({
+    "exec_command", "apply_patch",
     "run_bash", "run_command",
     "write_file", "edit_file", "read_file",
     "delete_file", "copy_file", "move_file",
@@ -119,25 +120,37 @@ def _map_to_codex_tool(
 ) -> tuple[str, dict]:
     """Map a YOLO workspace tool call to a Codex exec_command invocation.
 
+    Codex expects:
+    - exec_command: {"cmd": "<shell command string>"} (optional: "workdir")
+    - apply_patch: {"patch": "<patch text>"}
+
     Returns (codex_tool_name, codex_arguments).
     """
-    if tool_name in ("run_bash", "run_command"):
-        cmd = arguments.get("command") or arguments.get("cmd") or ""
-        return "exec_command", {"command": [cmd]}
+    if tool_name == "apply_patch":
+        patch = arguments.get("patch", "")
+        return "apply_patch", {"patch": str(patch)}
+
+    if tool_name in ("exec_command", "run_bash", "run_command"):
+        cmd = arguments.get("cmd") or arguments.get("command") or ""
+        out = {"cmd": str(cmd)}
+        workdir = arguments.get("workdir") or arguments.get("cwd")
+        if workdir:
+            out["workdir"] = str(workdir)
+        return "exec_command", out
 
     if tool_name == "write_file":
         path = arguments.get("path", "")
         content = arguments.get("content", "")
         # Use heredoc for safe multi-line write
         cmd = f"cat > {_shlex.quote(path)} << 'YOLO_HEREDOC_EOF'\n{content}\nYOLO_HEREDOC_EOF"
-        return "exec_command", {"command": [cmd]}
+        return "exec_command", {"cmd": cmd}
 
     if tool_name == "edit_file":
         path = arguments.get("path", "")
         old = arguments.get("old_text", arguments.get("old_str", ""))
         new = arguments.get("new_text", arguments.get("new_str", ""))
         if old and path:
-            # Use sed-style replacement via python one-liner for reliability
+            # Use python replacement for reliability
             cmd = (
                 f"python3 -c \"import pathlib; p=pathlib.Path({repr(path)}); "
                 f"t=p.read_text(); p.write_text(t.replace({repr(old)}, {repr(new)}, 1))\""
@@ -145,43 +158,43 @@ def _map_to_codex_tool(
         else:
             content = arguments.get("content", "")
             cmd = f"cat > {_shlex.quote(path)} << 'YOLO_HEREDOC_EOF'\n{content}\nYOLO_HEREDOC_EOF"
-        return "exec_command", {"command": [cmd]}
+        return "exec_command", {"cmd": cmd}
 
     if tool_name == "read_file":
         path = arguments.get("path", "")
         cmd = f"cat {_shlex.quote(path)}"
-        return "exec_command", {"command": [cmd]}
+        return "exec_command", {"cmd": cmd}
 
     if tool_name == "delete_file":
         path = arguments.get("path", "")
-        return "exec_command", {"command": [f"rm -f {_shlex.quote(path)}"]}
+        return "exec_command", {"cmd": f"rm -f {_shlex.quote(path)}"}
 
     if tool_name == "copy_file":
         src = arguments.get("source", arguments.get("src", ""))
         dst = arguments.get("destination", arguments.get("dest", ""))
-        return "exec_command", {"command": [f"cp {_shlex.quote(src)} {_shlex.quote(dst)}"]}
+        return "exec_command", {"cmd": f"cp {_shlex.quote(src)} {_shlex.quote(dst)}"}
 
     if tool_name == "move_file":
         src = arguments.get("source", arguments.get("src", ""))
         dst = arguments.get("destination", arguments.get("dest", ""))
-        return "exec_command", {"command": [f"mv {_shlex.quote(src)} {_shlex.quote(dst)}"]}
+        return "exec_command", {"cmd": f"mv {_shlex.quote(src)} {_shlex.quote(dst)}"}
 
     if tool_name == "make_dir":
         path = arguments.get("path", "")
-        return "exec_command", {"command": [f"mkdir -p {_shlex.quote(path)}"]}
+        return "exec_command", {"cmd": f"mkdir -p {_shlex.quote(path)}"}
 
     if tool_name == "list_dir":
         path = arguments.get("path", arguments.get("directory", "."))
-        return "exec_command", {"command": [f"ls -la {_shlex.quote(path)}"]}
+        return "exec_command", {"cmd": f"ls -la {_shlex.quote(path)}"}
 
     if tool_name == "file_info":
         path = arguments.get("path", "")
-        return "exec_command", {"command": [f"stat {_shlex.quote(path)}"]}
+        return "exec_command", {"cmd": f"stat {_shlex.quote(path)}"}
 
     if tool_name == "search_in_file":
         pattern = arguments.get("pattern", arguments.get("query", ""))
         path = arguments.get("path", arguments.get("file", "."))
-        return "exec_command", {"command": [f"grep -rn {_shlex.quote(pattern)} {_shlex.quote(path)}"]}
+        return "exec_command", {"cmd": f"grep -rn {_shlex.quote(pattern)} {_shlex.quote(path)}"}
 
     if tool_name in ("git_status", "git_diff", "git_log", "git_commit", "git_branch", "git_stash"):
         git_cmd = tool_name.replace("git_", "git ")
@@ -196,19 +209,20 @@ def _map_to_codex_tool(
             target = arguments.get("target", arguments.get("ref", ""))
             if target:
                 extra_args = f" {_shlex.quote(target)}"
-        return "exec_command", {"command": [f"{git_cmd}{extra_args}"]}
+        return "exec_command", {"cmd": f"{git_cmd}{extra_args}"}
 
     if tool_name == "codebase_search":
         query = arguments.get("query", arguments.get("pattern", ""))
         path = arguments.get("path", ".")
-        return "exec_command", {"command": [f"grep -rn {_shlex.quote(query)} {_shlex.quote(path)}"]}
+        return "exec_command", {"cmd": f"grep -rn {_shlex.quote(query)} {_shlex.quote(path)}"}
 
     # Fallback for terminal_* and any other routable tool: pass through as bash
     cmd_parts = [f"{tool_name}"]
     for k, v in arguments.items():
         cmd_parts.append(f"# {k}={v}")
-    fallback_cmd = arguments.get("command", arguments.get("cmd", " ".join(cmd_parts)))
-    return "exec_command", {"command": [str(fallback_cmd)]}
+    fallback_cmd = arguments.get("cmd", arguments.get("command", " ".join(cmd_parts)))
+    return "exec_command", {"cmd": str(fallback_cmd)}
+
 
 def _append_tool_result(
     session: Session,

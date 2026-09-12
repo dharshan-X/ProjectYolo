@@ -285,6 +285,30 @@ def _extract_responses_input(data: Dict[str, Any]) -> List[Dict[str, Any]]:
                     messages.append({"role": "user", "content": item.strip()})
             elif isinstance(item, dict):
                 item_type = item.get("type", "")
+                if item_type == "function_call":
+                    call_id = item.get("call_id") or item.get("id") or ""
+                    name = item.get("name", "")
+                    arguments = item.get("arguments", "{}")
+                    if isinstance(arguments, dict):
+                        arguments = json.dumps(arguments)
+                    tc = {
+                        "id": str(call_id),
+                        "type": "function",
+                        "function": {
+                            "name": name,
+                            "arguments": str(arguments),
+                        },
+                    }
+                    if messages and messages[-1].get("role") == "assistant" and "tool_calls" in messages[-1]:
+                        messages[-1]["tool_calls"].append(tc)
+                    else:
+                        messages.append({
+                            "role": "assistant",
+                            "content": None,
+                            "tool_calls": [tc],
+                        })
+                    continue
+
                 if item_type == "function_call_output":
                     call_id = item.get("call_id") or item.get("id") or ""
                     out = item.get("output")

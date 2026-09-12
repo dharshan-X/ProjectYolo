@@ -517,7 +517,7 @@ async def test_codex_mode_routes_run_bash_to_exec_command(monkeypatch):
             call_payload = json.dumps({
                 "call_id": "call_bash_001",
                 "name": "exec_command",
-                "arguments": {"command": ["pytest tests/"]},
+                "arguments": {"cmd": "pytest tests/"},
             })
             await signal_handler(f"YOLO_CLIENT_TOOL:{call_payload}")
         return "__CLIENT_TOOL_DISPATCHED__"
@@ -563,7 +563,7 @@ async def test_codex_mode_routes_run_bash_to_exec_command(monkeypatch):
             if e["event"] == "response.function_call_arguments.done"
         )
         parsed_args = json.loads(args_done["arguments"])
-        assert parsed_args["command"] == ["pytest tests/"]
+        assert parsed_args["cmd"] == "pytest tests/"
 
         # response.completed should have status=completed and include the function_call item
         completed = next(e["data"] for e in events if e["event"] == "response.completed")
@@ -657,7 +657,7 @@ def test_map_to_codex_tool_run_bash():
 
     name, args = _map_to_codex_tool("run_bash", {"command": "pytest tests/"})
     assert name == "exec_command"
-    assert args == {"command": ["pytest tests/"]}
+    assert args == {"cmd": "pytest tests/"}
 
 
 def test_map_to_codex_tool_write_file():
@@ -666,8 +666,8 @@ def test_map_to_codex_tool_write_file():
 
     name, args = _map_to_codex_tool("write_file", {"path": "/tmp/test.txt", "content": "hello world"})
     assert name == "exec_command"
-    assert isinstance(args["command"], list)
-    cmd = args["command"][0]
+    assert "cmd" in args
+    cmd = args["cmd"]
     assert "/tmp/test.txt" in cmd
     assert "hello world" in cmd
     assert "YOLO_HEREDOC_EOF" in cmd
@@ -679,8 +679,8 @@ def test_map_to_codex_tool_make_dir():
 
     name, args = _map_to_codex_tool("make_dir", {"path": "/home/user/project"})
     assert name == "exec_command"
-    assert "mkdir -p" in args["command"][0]
-    assert "/home/user/project" in args["command"][0]
+    assert "mkdir -p" in args["cmd"]
+    assert "/home/user/project" in args["cmd"]
 
 
 def test_map_to_codex_tool_git_commit():
@@ -689,6 +689,25 @@ def test_map_to_codex_tool_git_commit():
 
     name, args = _map_to_codex_tool("git_commit", {"message": "feat: add tests"})
     assert name == "exec_command"
-    cmd = args["command"][0]
+    cmd = args["cmd"]
     assert "git commit" in cmd
     assert "feat: add tests" in cmd
+
+
+def test_map_to_codex_tool_exec_command_direct():
+    """Verify _map_to_codex_tool passes through exec_command directly."""
+    from agent import _map_to_codex_tool
+
+    name, args = _map_to_codex_tool("exec_command", {"cmd": "ls -la", "workdir": "/home"})
+    assert name == "exec_command"
+    assert args == {"cmd": "ls -la", "workdir": "/home"}
+
+
+def test_map_to_codex_tool_apply_patch_direct():
+    """Verify _map_to_codex_tool passes through apply_patch."""
+    from agent import _map_to_codex_tool
+
+    name, args = _map_to_codex_tool("apply_patch", {"patch": "*** Begin Patch\n*** End Patch"})
+    assert name == "apply_patch"
+    assert args == {"patch": "*** Begin Patch\n*** End Patch"}
+
