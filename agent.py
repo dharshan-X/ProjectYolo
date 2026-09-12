@@ -103,16 +103,31 @@ import shlex as _shlex
 # YOLO tool names that should be routed to Codex's exec_command when in codex_mode.
 CODEX_ROUTABLE_TOOLS = frozenset({
     "exec_command", "apply_patch",
-    "run_bash", "run_command",
-    "write_file", "edit_file", "read_file",
+    "run_bash", "run_command", "bash", "sh", "shell", "execute_command", "exec",
+    "write_file", "write_to_file", "edit_file", "replace_file_content", "read_file", "view_file",
     "delete_file", "copy_file", "move_file",
-    "make_dir", "list_dir", "file_info",
+    "make_dir", "list_dir", "list_directory", "file_info", "find_by_name", "grep_search",
     "terminal_start", "terminal_send", "terminal_read",
     "terminal_interactive_run", "terminal_stop",
     "search_in_file",
     "git_status", "git_diff", "git_log", "git_commit", "git_branch", "git_stash",
     "codebase_search",
 })
+
+
+def _normalize_tool_name(name: str) -> str:
+    """Normalize tool names by stripping MCP prefixes (e.g. mcp__yolo__web_search -> web_search)."""
+    if not isinstance(name, str):
+        return ""
+    if name.startswith("mcp__yolo__"):
+        return name[len("mcp__yolo__") :]
+    if name.startswith("yolo__"):
+        return name[len("yolo__") :]
+    if name.startswith("mcp__"):
+        parts = name.split("__", 2)
+        if len(parts) == 3 and parts[1] == "yolo":
+            return parts[2]
+    return name
 
 
 def _map_to_codex_tool(
@@ -126,15 +141,16 @@ def _map_to_codex_tool(
     - apply_patch: {"patch": ...}
     - Workspace tools (shell, files, git, terminal): exec_command: {"cmd": ...}
     - Tools matching known client tools: use client tool name directly
-    - All other YOLO tools: route as MCP tool to Codex's yolo server: mcp__yolo__<tool_name>
 
     Returns (codex_tool_name, codex_arguments).
     """
-    if tool_name == "apply_patch":
+    clean_name = _normalize_tool_name(tool_name)
+
+    if clean_name == "apply_patch":
         patch = arguments.get("patch", "")
         return "apply_patch", {"patch": str(patch)}
 
-    if tool_name in ("exec_command", "run_bash", "run_command"):
+    if clean_name in ("exec_command", "run_bash", "run_command", "bash", "sh", "shell", "execute_command", "exec"):
         cmd = arguments.get("cmd") or arguments.get("command") or ""
         out = {"cmd": str(cmd)}
         workdir = arguments.get("workdir") or arguments.get("cwd")
@@ -231,16 +247,17 @@ def _map_to_codex_tool(
     known = client_tool_names or set()
     if tool_name in known:
         return tool_name, arguments
+    if clean_name in known:
+        return clean_name, arguments
 
-    mcp_name = f"mcp__yolo__{tool_name}"
+    mcp_name = f"mcp__yolo__{clean_name}"
     if mcp_name in known:
         return mcp_name, arguments
 
-    if tool_name.startswith("mcp__"):
+    if tool_name.startswith("mcp__") and tool_name in known:
         return tool_name, arguments
 
-    # Route any other YOLO tool to Codex's yolo MCP server
-    return mcp_name, arguments
+    return tool_name, arguments
 
 
 def _append_tool_result(
@@ -482,7 +499,7 @@ async def _execute_unanswered_tool_calls(
             )
             continue
 
-        # ── Codex mode: route all tools to client (native workspace or MCP) ──
+        # ── Codex mode: route workspace or known client tools to client ──
         codex_mode = getattr(session, "codex_mode", False)
         if codex_mode:
             client_tools = getattr(session, "client_tools", [])
@@ -492,20 +509,30 @@ async def _execute_unanswered_tool_calls(
                 if isinstance(t, dict)
             }
             client_tool_names = {name for name in client_tool_names if name}
-            codex_name, codex_args = _map_to_codex_tool(func_name, args, client_tool_names)
-            if signal_handler:
-                payload = json.dumps({
-                    "call_id": tc_id,
-                    "name": codex_name,
-                    "arguments": codex_args,
-                })
-                await signal_handler(f"YOLO_CLIENT_TOOL:{payload}")
-            # Don't add to message_history; Codex will send back function_call_output
-            # in the next turn. Return sentinel so the agent loop breaks.
-            return _CLIENT_TOOL_DISPATCHED
-            # Note: we return from the outer function, not from run_and_store.
-            # Only ONE client tool dispatch per turn; Codex handles parallel calls
-            # by receiving multiple function_call items, but we send one at a time.
+
+            clean_name = _normalize_tool_name(func_name)
+            is_client_tool = (
+                clean_name in CODEX_ROUTABLE_TOOLS
+                or func_name in CODEX_ROUTABLE_TOOLS
+                or (func_name in client_tool_names and not func_name.startswith("mcp__yolo__"))
+                or (clean_name in client_tool_names and not clean_name.startswith("mcp__yolo__"))
+            )
+
+            if is_client_tool:
+                codex_name, codex_args = _map_to_codex_tool(clean_name, args, client_tool_names)
+                if signal_handler:
+                    payload = json.dumps({
+                        "call_id": tc_id,
+                        "name": codex_name,
+                        "arguments": codex_args,
+                    })
+                    await signal_handler(f"YOLO_CLIENT_TOOL:{payload}")
+                # Don't add to message_history; Codex will send back function_call_output
+                # in the next turn. Return sentinel so the agent loop breaks.
+                return _CLIENT_TOOL_DISPATCHED
+                # Note: we return from the outer function, not from run_and_store.
+                # Only ONE client tool dispatch per turn; Codex handles parallel calls
+                # by receiving multiple function_call items, but we send one at a time.
 
         async def run_and_store(name=func_name, arguments=args, call_id=tc_id):
             try:

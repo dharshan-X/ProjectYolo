@@ -713,21 +713,29 @@ def test_map_to_codex_tool_apply_patch_direct():
 
 
 def test_map_to_codex_tool_non_workspace_yolo_tools():
-    """Verify non-workspace YOLO tools are mapped to mcp__yolo__<tool> for Codex."""
+    """Verify non-workspace YOLO tools are preserved or mapped when advertised by client."""
     from agent import _map_to_codex_tool
 
-    # browser_navigate
-    name, args = _map_to_codex_tool("browser_navigate", {"url": "https://news.ycombinator.com"})
+    # When client advertises mcp__yolo__browser_navigate
+    name, args = _map_to_codex_tool(
+        "browser_navigate",
+        {"url": "https://news.ycombinator.com"},
+        client_tool_names={"mcp__yolo__browser_navigate"},
+    )
     assert name == "mcp__yolo__browser_navigate"
     assert args == {"url": "https://news.ycombinator.com"}
 
-    # web_search
+    # When client does not advertise mcp tool, preserves native tool name
     name, args = _map_to_codex_tool("web_search", {"query": "AI news"})
-    assert name == "mcp__yolo__web_search"
+    assert name == "web_search"
     assert args == {"query": "AI news"}
 
-    # already prefixed
-    name, args = _map_to_codex_tool("mcp__yolo__memory_search", {"query": "facts"})
+    # Already prefixed with mcp__yolo__
+    name, args = _map_to_codex_tool(
+        "mcp__yolo__memory_search",
+        {"query": "facts"},
+        client_tool_names={"mcp__yolo__memory_search"},
+    )
     assert name == "mcp__yolo__memory_search"
     assert args == {"query": "facts"}
 
@@ -802,4 +810,20 @@ async def test_codex_turn_dispatches_mcp_function_call(monkeypatch):
         output_items = resp_completed["response"]["output"]
         assert len(output_items) == 1
         assert output_items[0]["name"] == "mcp__yolo__browser_navigate"
+
+
+@pytest.mark.anyio
+async def test_codex_mode_internal_prefixed_tool_executes_natively(monkeypatch):
+    """Verify that when the model issues mcp__yolo__web_search, it executes natively and does not emit unsupported function_call to Codex."""
+    from tool_dispatcher import execute_tool_direct
+
+    # Verify tool_dispatcher resolves mcp__yolo__web_search
+    # Test with a lightweight native tool
+    res = await execute_tool_direct("mcp__yolo__read_user_identity", {}, user_id=1, confirmed=True)
+    assert "Error: mcp__yolo__read_user_identity not found." not in res
+
+    # Verify yolo__ prefix also resolves
+    res2 = await execute_tool_direct("yolo__read_user_identity", {}, user_id=1, confirmed=True)
+    assert "Error: yolo__read_user_identity not found." not in res2
+
 

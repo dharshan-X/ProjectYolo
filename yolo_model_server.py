@@ -244,8 +244,15 @@ async def _route_or_execute_tool(
         for t in client_tools
         if isinstance(t, dict)
     }
+    client_tool_names = {name for name in client_tool_names if name}
 
-    if tool_name in client_tool_names:
+    clean_name = tool_name
+    if clean_name.startswith("mcp__yolo__"):
+        clean_name = clean_name[len("mcp__yolo__") :]
+    elif clean_name.startswith("yolo__"):
+        clean_name = clean_name[len("yolo__") :]
+
+    if tool_name in client_tool_names and not tool_name.startswith("mcp__yolo__"):
         cid = call_id or f"call_{uuid.uuid4().hex[:12]}"
         if signal_handler:
             payload = json.dumps({"call_id": cid, "name": tool_name, "arguments": arguments})
@@ -471,6 +478,8 @@ async def handle_chat_completions(request: web.Request) -> web.Response:
             model_name=model,
             client_tools=data.get("tools", []),
         )
+        if data.get("tools") or data.get("client_metadata") is not None:
+            session.codex_mode = True
     except Exception as e:
         return _openai_error(f"Failed to build session: {e}")
 
@@ -945,33 +954,47 @@ async def handle_responses(request: web.Request) -> web.Response:
 
 def _format_tool_commentary(name: str, args: Any, result: Optional[str] = None) -> str:
     """Format an internal tool execution into clean human-readable commentary for Codex Desktop."""
+    clean_name = name
+    if clean_name.startswith("mcp__yolo__"):
+        clean_name = clean_name[len("mcp__yolo__") :]
+    elif clean_name.startswith("yolo__"):
+        clean_name = clean_name[len("yolo__") :]
+    elif clean_name.startswith("mcp__"):
+        parts = clean_name.split("__", 2)
+        if len(parts) == 3 and parts[1] == "yolo":
+            clean_name = parts[2]
+
     summary = ""
     if isinstance(args, dict):
-        if name in ("read_file", "view_file") and "path" in args:
+        if clean_name in ("read_file", "view_file") and "path" in args:
             summary = f"📖 Read file `{args['path']}`"
-        elif name in ("list_dir", "list_directory") and "path" in args:
+        elif clean_name in ("list_dir", "list_directory") and "path" in args:
             summary = f"📁 Listed directory `{args['path']}`"
-        elif name in ("write_file", "write_to_file") and "path" in args:
+        elif clean_name in ("write_file", "write_to_file") and "path" in args:
             summary = f"✏️ Wrote to `{args['path']}`"
-        elif name in ("replace_file_content", "edit_file") and "path" in args:
+        elif clean_name in ("replace_file_content", "edit_file") and "path" in args:
             summary = f"✏️ Modified `{args['path']}`"
-        elif name in ("web_search", "search_web") and "query" in args:
+        elif clean_name in ("web_search", "search_web") and "query" in args:
             summary = f"🌐 Searched web: \"{args['query']}\""
-        elif name in ("read_url_content", "fetch_web_page") and "url" in args:
+        elif clean_name in ("read_url_content", "fetch_web_page") and "url" in args:
             summary = f"🌐 Fetched URL: `{args['url']}`"
-        elif name in ("exec_command", "run_command"):
+        elif clean_name in ("exec_command", "run_command"):
             cmd = args.get("cmd") or args.get("command") or ""
             summary = f"⚡ Ran command: `{cmd}`"
+        elif clean_name in ("read_user_identity", "user_identity"):
+            summary = "👤 Checked user identity"
+        elif clean_name in ("memory_search", "search_memory") and "query" in args:
+            summary = f"🧠 Searched memory: \"{args['query']}\""
         else:
             arg_items = [f"{k}={repr(v)}" for k, v in args.items()]
             arg_str = ", ".join(arg_items)
             if len(arg_str) > 100:
                 arg_str = arg_str[:97] + "..."
-            summary = f"🔧 `{name}({arg_str})`"
+            summary = f"🔧 `{clean_name}({arg_str})`"
     elif args:
-        summary = f"🔧 `{name}({args})`"
+        summary = f"🔧 `{clean_name}({args})`"
     else:
-        summary = f"🔧 `{name}()`"
+        summary = f"🔧 `{clean_name}()`"
 
     if result and isinstance(result, str):
         res_str = result.strip()

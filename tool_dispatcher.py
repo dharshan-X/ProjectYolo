@@ -199,22 +199,38 @@ async def execute_tool_direct(
 
     res = None
 
+    clean_name = func_name
+    if clean_name.startswith("mcp__yolo__"):
+        clean_name = clean_name[len("mcp__yolo__") :]
+    elif clean_name.startswith("yolo__"):
+        clean_name = clean_name[len("yolo__") :]
+    elif clean_name.startswith("mcp__"):
+        parts = clean_name.split("__", 2)
+        if len(parts) == 3 and parts[1] == "yolo":
+            clean_name = parts[2]
+
     # ── Path 1: MCP tool ──
-    if mcp_manager.get_server_for_tool(func_name):
+    if mcp_manager.get_server_for_tool(func_name) or mcp_manager.get_server_for_tool(clean_name):
+        server_tool = func_name if mcp_manager.get_server_for_tool(func_name) else clean_name
         try:
-            res = await mcp_manager.call_tool(func_name, func_args)
+            res = await mcp_manager.call_tool(server_tool, func_args)
         except Exception as e:
             res = f"MCP Execution error: {e}"
 
     else:
         # ── Path 2: Native / Plugin tool ──
-        target = TOOL_REGISTRY.get(func_name) or PLUGIN_HANDLERS.get(func_name)
-        if not target and func_name in {"codebase_index", "codebase_search"}:
+        target = (
+            TOOL_REGISTRY.get(clean_name)
+            or TOOL_REGISTRY.get(func_name)
+            or PLUGIN_HANDLERS.get(clean_name)
+            or PLUGIN_HANDLERS.get(func_name)
+        )
+        if not target and clean_name in {"codebase_index", "codebase_search"}:
             import importlib
 
             importlib.import_module("tools.codebase_ops")
-            target = TOOL_REGISTRY.get(func_name)
-        if func_name == "compact_conversation":
+            target = TOOL_REGISTRY.get(clean_name) or TOOL_REGISTRY.get(func_name)
+        if clean_name == "compact_conversation":
             from prompt_builder import _compact_history
 
             target = _compact_history
@@ -244,7 +260,7 @@ async def execute_tool_direct(
                 func_args["confirm_func"] = lambda _action, _target: bool(confirmed)
 
             # Swarm Context Injection
-            if func_name in {
+            if clean_name in {
                 "broadcast_swarm_message",
                 "read_swarm_messages",
                 "wait_for_swarm_message",
@@ -260,14 +276,14 @@ async def execute_tool_direct(
 
             # Special-case injections for complex background task runners
             if (
-                func_name == "run_background_mission"
+                clean_name == "run_background_mission"
                 and "mission_coro" in sig.parameters
             ):
                 func_args["mission_coro"] = lambda tid: _run_with_history_sync(
                     tid, func_args.get("objective", ""), session, signal_handler
                 )
             elif (
-                func_name == "dispatch_parallel_agents"
+                clean_name == "dispatch_parallel_agents"
                 and "mission_coro" in sig.parameters
             ):
                 func_args["mission_coro"] = lambda obj, tid: _run_with_history_sync(
@@ -275,6 +291,14 @@ async def execute_tool_direct(
                 )
 
             # Retry transient errors
+            _NON_RETRYABLE_ERRORS = (
+                FileNotFoundError,
+                PermissionError,
+                IsADirectoryError,
+                NotADirectoryError,
+                FileExistsError,
+                ProcessLookupError,
+            )
             _TRANSIENT_ERRORS = (TimeoutError, ConnectionError, OSError)
             _MAX_RETRIES = 2
             for _attempt in range(_MAX_RETRIES + 1):
@@ -285,6 +309,9 @@ async def execute_tool_direct(
                         res = await _run_sync_callable(target, func_args)
                         if inspect.iscoroutine(res):
                             res = await res
+                    break
+                except _NON_RETRYABLE_ERRORS as non_retry_err:
+                    res = f"Error in {func_name}: {non_retry_err}"
                     break
                 except _TRANSIENT_ERRORS as retry_err:
                     if _attempt < _MAX_RETRIES:
